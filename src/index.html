@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>CADLite</title>
+<link rel="stylesheet" href="styles/main.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- Top Window / Quick Access Bar -->
+    <header id="quick-access-bar">
+      <div class="app-button" title="CADLite Application Menu">
+        <span class="app-icon">◆</span>
+      </div>
+      <div class="qa-tools">
+        <button class="qa-btn" id="qa-new" title="New Part">
+          <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M3 1h7l4 4v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zm6 1H3v12h10V6H9V2z"/></svg>
+        </button>
+        <button class="qa-btn" id="qa-open" title="Open Project">
+          <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M1 3.5A1.5 1.5 0 0 1 2.5 2h3.764a1.5 1.5 0 0 1 1.06.44l1.236 1.237a.5.5 0 0 0 .354.146H13.5A1.5 1.5 0 0 1 15 5.323v1.177H2.5A1.5 1.5 0 0 0 1 8V3.5zm1 4.5h12.5a.5.5 0 0 1 .485.621l-1.5 6A.5.5 0 0 1 13 14.5H3a.5.5 0 0 1-.485-.379l-1.5-6A.5.5 0 0 1 2 8z"/></svg>
+        </button>
+        <button class="qa-btn" id="qa-save" title="Save Project">
+          <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M2 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4.414a1 1 0 0 0-.293-.707l-2.414-2.414A1 1 0 0 0 11.586 1H2zm2 1h7v3H4V2zm-1 5h10v7H3V7z"/></svg>
+        </button>
+        <button class="qa-btn" id="qa-import-step" title="Import STEP CAD Model (.step, .stp)">
+          <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path fill="currentColor" d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/></svg>
+        </button>
+        <button class="qa-btn" id="qa-export-step" title="Export STEP CAD Model (.step, .stp)">
+          <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/><path fill="currentColor" d="M5.5 10a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1H6a.5.5 0 0 1-.5-.5zm0 2a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1H6a.5.5 0 0 1-.5-.5z"/></svg>
+        </button>
+        <button class="qa-btn" id="qa-drawing-sheet" title="2D Engineering Drawing Sheet (.idw)">
+          <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M14 1H2a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path fill="currentColor" d="M3 3h4v3H3V3zm6 0h4v3H9V3zM3 8h4v4H3V8zm6 3h4v2H9v-2z"/></svg>
+        </button>
+        <button class="qa-btn" id="qa-export-dxf" title="Export 2D Drawing DXF (.dxf)">
+          <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm2-1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H2z"/><path fill="currentColor" d="M4 4h3a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4V4zm1 1v6h2a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H5z"/></svg>
+        </button>
+        <button class="qa-btn" id="qa-export-stl" title="Export STL">
+          <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path fill="currentColor" d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+        </button>
+      </div>
+      <div class="window-title">CADLite - Part2.ipt</div>
+    </header>
+
+    <!-- Ribbon Tabs & Panels -->
+    <div id="ribbon">
+      <!-- Ribbon Tabs Bar -->
+      <nav id="ribbon-tabs">
+        <button class="ribbon-tab file-tab" id="tab-file">File</button>
+        <button class="ribbon-tab active" data-tab="model">3D Model</button>
+        <button class="ribbon-tab" data-tab="sketch">Sketch</button>
+        <button class="ribbon-tab" data-tab="assemble">Assemble</button>
+        <button class="ribbon-tab" data-tab="view">View</button>
+      </nav>
+
+      <!-- Ribbon Tab Content: 3D Model -->
+      <div class="ribbon-content active" id="ribbon-model">
+        
+        <!-- Sketch Panel -->
+        <section class="ribbon-panel">
+          <div class="panel-tools">
+            <button class="ribbon-btn hero" id="btn-start-sketch" title="Start 2D Sketch (S)">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <path fill="#ffb020" d="M4 24h6L24 10l-6-6L4 18v6z"/>
+                  <path fill="#e2e8f0" d="M25.5 8.5l-2-2a1.5 1.5 0 0 0-2.1 0l-1.9 1.9 4.1 4.1 1.9-1.9a1.5 1.5 0 0 0 0-2.1z"/>
+                  <path fill="#4fa1d8" d="M2 28h28v2H2z" opacity="0.6"/>
+                </svg>
+              </div>
+              <span class="btn-label">Start 2D<br/>Sketch</span>
+            </button>
+          </div>
+          <footer class="panel-caption">Sketch</footer>
+        </section>
+
+        <!-- Create Panel -->
+        <section class="ribbon-panel">
+          <div class="panel-tools">
+            <button class="ribbon-btn hero" id="btn-extrude" title="Extrude profile into solid">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <polygon points="16,3 29,10 16,17 3,10" fill="#4fa1d8"/>
+                  <polygon points="3,10 16,17 16,29 3,22" fill="#2b75a8"/>
+                  <polygon points="29,10 16,17 16,29 29,22" fill="#1b5a84"/>
+                  <path d="M16,1 V9 M13,4 L16,1 L19,4" stroke="#ffb020" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <span class="btn-label">Extrude</span>
+            </button>
+
+            <button class="ribbon-btn hero" id="btn-revolve" title="Revolve profile around axis">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <ellipse cx="16" cy="16" rx="12" ry="6" fill="none" stroke="#4fa1d8" stroke-width="2"/>
+                  <path d="M16,6 A10,10 0 1,1 6,16" fill="none" stroke="#ffb020" stroke-width="2.5"/>
+                  <polygon points="16,2 20,6 16,10" fill="#ffb020"/>
+                </svg>
+              </div>
+              <span class="btn-label">Revolve</span>
+            </button>
+
+            <div class="tool-column">
+              <button class="ribbon-btn compact" data-primitive="box" title="Insert Box primitive">
+                <span class="compact-icon">▢</span> Box
+              </button>
+              <button class="ribbon-btn compact" data-primitive="cylinder" title="Insert Cylinder primitive">
+                <span class="compact-icon">◯</span> Cylinder
+              </button>
+              <button class="ribbon-btn compact" data-primitive="sphere" title="Insert Sphere primitive">
+                <span class="compact-icon">●</span> Sphere
+              </button>
+            </div>
+
+            <div class="tool-column">
+              <button class="ribbon-btn compact" data-primitive="cone" title="Insert Cone primitive">
+                <span class="compact-icon">▲</span> Cone
+              </button>
+              <button class="ribbon-btn compact" id="btn-sweep" title="Sweep profile along path">
+                <span class="compact-icon">⌒</span> Sweep
+              </button>
+              <button class="ribbon-btn compact" id="btn-loft" title="Loft between profiles">
+                <span class="compact-icon">⬡</span> Loft
+              </button>
+            </div>
+          </div>
+          <footer class="panel-caption">Create</footer>
+        </section>
+
+        <!-- Modify Panel -->
+        <section class="ribbon-panel">
+          <div class="panel-tools">
+            <button class="ribbon-btn hero" id="btn-fillet" title="Fillet (Round) edges">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <path d="M6 26V14a8 8 0 0 1 8-8h12v20H6z" fill="#4fa1d8"/>
+                  <path d="M6 14a8 8 0 0 1 8-8" stroke="#ffb020" stroke-width="3" fill="none"/>
+                  <circle cx="14" cy="14" r="2" fill="#ffb020"/>
+                </svg>
+              </div>
+              <span class="btn-label">Fillet</span>
+            </button>
+
+            <button class="ribbon-btn hero" id="btn-chamfer" title="Chamfer (Bevel) edges">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <polygon points="6,26 6,15 15,6 26,6 26,26" fill="#4fa1d8"/>
+                  <line x1="6" y1="15" x2="15" y2="6" stroke="#ffb020" stroke-width="3"/>
+                </svg>
+              </div>
+              <span class="btn-label">Chamfer</span>
+            </button>
+
+            <button class="ribbon-btn hero" id="btn-hole" title="Create Hole">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <rect x="6" y="8" width="20" height="18" fill="#4fa1d8" rx="2"/>
+                  <circle cx="16" cy="16" r="5" fill="#1b1f26"/>
+                  <line x1="16" y1="4" x2="16" y2="28" stroke="#ffb020" stroke-dasharray="2,2"/>
+                </svg>
+              </div>
+              <span class="btn-label">Hole</span>
+            </button>
+
+            <div class="tool-column">
+              <button class="ribbon-btn compact" id="btn-bool-union" title="Combine / Union two solid parts">
+                <span class="compact-icon">∪</span> Join
+              </button>
+              <button class="ribbon-btn compact" id="btn-bool-cut" title="Cut / Subtract second part from first">
+                <span class="compact-icon">−</span> Cut
+              </button>
+              <button class="ribbon-btn compact" id="btn-bool-intersect" title="Intersect solid parts">
+                <span class="compact-icon">∩</span> Intersect
+              </button>
+            </div>
+
+            <div class="tool-column">
+              <button class="ribbon-btn compact" id="btn-shell" title="Hollow out part (Shell)">
+                <span class="compact-icon">▢</span> Shell
+              </button>
+              <button class="ribbon-btn compact" id="btn-split" title="Split solid body">
+                <span class="compact-icon">✂</span> Split
+              </button>
+              <button class="ribbon-btn compact" id="btn-thread" title="Thread feature">
+                <span class="compact-icon">⦚</span> Thread
+              </button>
+            </div>
+          </div>
+          <footer class="panel-caption">Modify</footer>
+        </section>
+
+        <!-- Work Features Panel -->
+        <section class="ribbon-panel">
+          <div class="panel-tools">
+            <button class="ribbon-btn hero" id="btn-work-plane" title="Work Plane">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <polygon points="8,6 26,6 22,26 4,26" fill="rgba(255, 176, 32, 0.25)" stroke="#ffb020" stroke-width="2"/>
+                </svg>
+              </div>
+              <span class="btn-label">Plane</span>
+            </button>
+            <div class="tool-column">
+              <button class="ribbon-btn compact" id="btn-work-axis" title="Work Axis">
+                <span class="compact-icon">|</span> Axis
+              </button>
+              <button class="ribbon-btn compact" id="btn-work-point" title="Work Point">
+                <span class="compact-icon">✦</span> Point
+              </button>
+              <button class="ribbon-btn compact" id="btn-work-ucs" title="User Coordinate System">
+                <span class="compact-icon">✛</span> UCS
+              </button>
+            </div>
+          </div>
+          <footer class="panel-caption">Work Features</footer>
+        </section>
+
+        <!-- Pattern Panel -->
+        <section class="ribbon-panel">
+          <div class="panel-tools">
+            <div class="tool-column">
+              <button class="ribbon-btn compact" id="btn-pattern-rect" title="Rectangular Pattern">
+                <span class="compact-icon">⸬</span> Rectangular
+              </button>
+              <button class="ribbon-btn compact" id="btn-pattern-circ" title="Circular Pattern">
+                <span class="compact-icon">◎</span> Circular
+              </button>
+              <button class="ribbon-btn compact" id="btn-pattern-mirror" title="Mirror Feature/Body">
+                <span class="compact-icon">⇋</span> Mirror
+              </button>
+            </div>
+          </div>
+          <footer class="panel-caption">Pattern</footer>
+        </section>
+
+        <!-- Gizmo / Transform Panel -->
+        <section class="ribbon-panel">
+          <div class="panel-tools">
+            <div class="tool-column">
+              <button class="ribbon-btn compact active" data-transform-mode="translate" title="Move (G)">
+                <span class="compact-icon">✥</span> Move
+              </button>
+              <button class="ribbon-btn compact" data-transform-mode="rotate" title="Rotate (R)">
+                <span class="compact-icon">↻</span> Rotate
+              </button>
+              <button class="ribbon-btn compact" data-transform-mode="scale" title="Scale (X)">
+                <span class="compact-icon">⇱</span> Scale
+              </button>
+            </div>
+          </div>
+          <footer class="panel-caption">Gizmo</footer>
+        </section>
+
+        <!-- STEP CAD Interoperability Panel -->
+        <section class="ribbon-panel">
+          <div class="panel-tools">
+            <button class="ribbon-btn hero" id="btn-import-step" title="Import STEP CAD Model (*.step, *.stp)">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <path fill="#4fa1d8" d="M6 4h14l6 6v18H6V4z" opacity="0.3"/>
+                  <path fill="#38bdf8" d="M16 10v12m-6-6l6 6 6-6" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                </svg>
+              </div>
+              <span class="btn-label">Import<br/>STEP</span>
+            </button>
+            <button class="ribbon-btn hero" id="btn-export-step" title="Export to STEP B-Rep CAD (*.step, *.stp)">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <path fill="#ffb020" d="M6 4h14l6 6v18H6V4z" opacity="0.3"/>
+                  <path fill="#ffb020" d="M16 22V10m-6 6l6-6 6 6" stroke="#ffb020" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                </svg>
+              </div>
+              <span class="btn-label">Export<br/>STEP</span>
+            </button>
+          </div>
+          <footer class="panel-caption">STEP CAD</footer>
+        </section>
+
+        <!-- Engineering Drawing / Drafting Panel -->
+        <section class="ribbon-panel">
+          <div class="panel-tools">
+            <button class="ribbon-btn hero" id="btn-drawing-sheet" title="Create 2D Engineering Drawing Sheet (*.idw / Sheet)">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <rect x="4" y="4" width="24" height="24" rx="2" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5"/>
+                  <rect x="7" y="7" width="8" height="7" fill="none" stroke="#94a3b8" stroke-dasharray="1,1"/>
+                  <rect x="17" y="7" width="8" height="7" fill="none" stroke="#38bdf8"/>
+                  <rect x="7" y="17" width="8" height="7" fill="none" stroke="#94a3b8"/>
+                  <rect x="17" y="19" width="8" height="5" fill="#334155" stroke="#64748b"/>
+                </svg>
+              </div>
+              <span class="btn-label">Drawing<br/>Sheet</span>
+            </button>
+            <button class="ribbon-btn hero" id="btn-export-dxf" title="Export 2D Drawing as AutoCAD DXF (*.dxf)">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <path fill="#22c55e" d="M6 4h14l6 6v18H6V4z" opacity="0.3"/>
+                  <path d="M10 20l6-6 6 6M16 14v10" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                  <text x="7" y="12" font-size="6" fill="#22c55e" font-weight="bold" font-family="monospace">DXF</text>
+                </svg>
+              </div>
+              <span class="btn-label">Export<br/>DXF</span>
+            </button>
+          </div>
+          <footer class="panel-caption">Drawing</footer>
+        </section>
+
+      </div>
+
+
+      <!-- Ribbon Tab Content: Sketch (active during sketch session) -->
+      <div class="ribbon-content" id="ribbon-sketch">
+        <section class="ribbon-panel">
+          <div class="panel-tools">
+            <button class="ribbon-btn compact active" data-sketch-tool="line" title="Draw Lines / Polyline">
+              <span class="compact-icon">/</span> Line
+            </button>
+            <button class="ribbon-btn compact" data-sketch-tool="rect" title="Draw 2-Point Rectangle">
+              <span class="compact-icon">▭</span> Rectangle
+            </button>
+            <button class="ribbon-btn compact" data-sketch-tool="circle" title="Draw Center-Point Circle">
+              <span class="compact-icon">○</span> Circle
+            </button>
+          </div>
+          <footer class="panel-caption">Draw</footer>
+        </section>
+
+        <!-- Constrain Panel (Autodesk Inventor style) -->
+        <section class="ribbon-panel">
+          <div class="panel-tools">
+            <button class="ribbon-btn hero" id="btn-constraint-dimension" title="General Dimension (D)">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <path d="M4 8v16m24-16v16M6 16h20" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
+                  <path d="M10 13l-4 3 4 3M22 13l4 3-4 3" fill="#38bdf8"/>
+                </svg>
+              </div>
+              <span class="btn-label">Dimension<br/>(D)</span>
+            </button>
+
+            <div class="tool-column">
+              <button class="ribbon-btn compact" id="btn-constraint-horizontal" title="Horizontal Constraint (H)">
+                <span class="compact-icon">─</span> Horizontal
+              </button>
+              <button class="ribbon-btn compact" id="btn-constraint-vertical" title="Vertical Constraint (V)">
+                <span class="compact-icon">│</span> Vertical
+              </button>
+              <button class="ribbon-btn compact" id="btn-constraint-coincident" title="Coincident Constraint">
+                <span class="compact-icon">⚬=⚬</span> Coincident
+              </button>
+            </div>
+
+            <div class="tool-column">
+              <button class="ribbon-btn compact" id="btn-constraint-perpendicular" title="Perpendicular Constraint (90°)">
+                <span class="compact-icon">⊥</span> Perpendicular
+              </button>
+              <button class="ribbon-btn compact" id="btn-constraint-parallel" title="Parallel Constraint">
+                <span class="compact-icon">⫽</span> Parallel
+              </button>
+              <button class="ribbon-btn compact" id="btn-constraint-equal" title="Equal Length Constraint">
+                <span class="compact-icon">=</span> Equal
+              </button>
+            </div>
+
+            <div class="tool-column">
+              <button class="ribbon-btn compact" id="btn-constraint-fix" title="Fix / Lock Point">
+                <span class="compact-icon">🔒</span> Fix
+              </button>
+            </div>
+          </div>
+          <footer class="panel-caption">Constrain</footer>
+        </section>
+
+        <section class="ribbon-panel">
+          <div class="panel-tools">
+            <button class="ribbon-btn hero accent" id="extrude-btn" title="Finish Sketch and Extrude profile">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <polygon points="16,4 28,11 16,18 4,11" fill="#ffb020"/>
+                  <polygon points="4,11 16,18 16,28 4,21" fill="#d98212"/>
+                  <polygon points="28,11 16,18 16,28 28,21" fill="#a05d05"/>
+                </svg>
+              </div>
+              <span class="btn-label">Finish &<br/>Extrude</span>
+            </button>
+            <button class="ribbon-btn hero" id="cancel-sketch-btn" title="Cancel Sketch">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <circle cx="16" cy="16" r="12" fill="#e53e3e"/>
+                  <path d="M11 11l10 10M21 11l-10 10" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <span class="btn-label">Cancel<br/>Sketch</span>
+            </button>
+          </div>
+          <footer class="panel-caption">Exit</footer>
+        </section>
+      </div>
+
+      <!-- Ribbon Tab Content: Assemble -->
+      <div class="ribbon-content" id="ribbon-assemble">
+        <section class="ribbon-panel">
+          <div class="panel-tools">
+            <div class="tool-column">
+              <button class="ribbon-btn compact" id="mate-coincident" title="Coincident mate">
+                <span class="compact-icon">⏚</span> Coincident
+              </button>
+              <button class="ribbon-btn compact" id="mate-concentric" title="Concentric mate">
+                <span class="compact-icon">◎</span> Concentric
+              </button>
+              <button class="ribbon-btn compact" id="mate-distance" title="Distance mate">
+                <span class="compact-icon">↔</span> Distance
+              </button>
+            </div>
+          </div>
+          <footer class="panel-caption">Mates</footer>
+        </section>
+        <section class="ribbon-panel">
+          <div class="panel-tools">
+            <button class="ribbon-btn hero" id="group-btn" title="Group selected parts into sub-assembly">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <rect x="4" y="6" width="10" height="10" fill="#4fa1d8"/>
+                  <rect x="18" y="16" width="10" height="10" fill="#ffb020"/>
+                  <path d="M14 11h8v5" stroke="#fff" stroke-width="2" fill="none"/>
+                </svg>
+              </div>
+              <span class="btn-label">Group<br/>Selected</span>
+            </button>
+          </div>
+          <footer class="panel-caption">Components</footer>
+        </section>
+      </div>
+
+      <!-- Ribbon Tab Content: View -->
+      <div class="ribbon-content" id="ribbon-view">
+        <section class="ribbon-panel">
+          <div class="panel-tools">
+            <div class="tool-column">
+              <button class="ribbon-btn compact" id="view-home" title="Isometric Home View">
+                <span class="compact-icon">⌂</span> Home View
+              </button>
+              <button class="ribbon-btn compact" id="view-top" title="Top View">
+                <span class="compact-icon">⊤</span> Top View
+              </button>
+              <button class="ribbon-btn compact" id="view-front" title="Front View">
+                <span class="compact-icon">⊞</span> Front View
+              </button>
+            </div>
+            <div class="tool-column">
+              <button class="ribbon-btn compact" id="view-right" title="Right View">
+                <span class="compact-icon">⊳</span> Right View
+              </button>
+              <button class="ribbon-btn compact" id="view-zoom-all" title="Zoom All / Fit Scene">
+                <span class="compact-icon">⊡</span> Zoom All
+              </button>
+            </div>
+          </div>
+          <footer class="panel-caption">Appearance & Camera</footer>
+        </section>
+      </div>
+
+    </div>
+
+    <!-- Main Workspace -->
+    <div id="workspace">
+
+      <!-- Left: Model Browser (Autodesk Inventor Style) -->
+      <aside id="tree-panel">
+        <div class="model-browser-header">
+          <span class="browser-title">Model</span>
+          <div class="browser-filter">
+            <button class="browser-tool-btn" title="Filter features">🔍</button>
+          </div>
+        </div>
+        <div id="tree-root" class="tree-root"></div>
+      </aside>
+
+      <!-- Center: 3D Viewport -->
+      <main id="viewport-container">
+        <!-- Viewport Document Tab -->
+        <div id="doc-tabs-bar">
+          <div class="doc-tab active">
+            <span class="doc-tab-icon">📄</span>
+            <span class="doc-tab-title">Part2</span>
+            <span class="doc-tab-close">×</span>
+          </div>
+          <button class="doc-tab-add" title="New Part">+</button>
+        </div>
+
+        <canvas id="viewport-canvas"></canvas>
+
+        <!-- ViewCube overlay in Top-Right -->
+        <div id="viewcube-container"></div>
+
+        <!-- Vertical Navigation Bar on Right Edge -->
+        <div id="nav-bar">
+          <button class="nav-btn" id="nav-pan" title="Pan (Middle Click / Drag)">
+            <svg viewBox="0 0 20 20" width="16" height="16"><path fill="currentColor" d="M10 2a1 1 0 0 1 1 1v4h4a1 1 0 1 1 0 2h-4v4h4a1 1 0 1 1 0 2h-4v2a1 1 0 1 1-2 0v-2H5a1 1 0 1 1 0-2h4v-4H5a1 1 0 1 1 0-2h4V3a1 1 0 0 1 1-1z"/></svg>
+          </button>
+          <button class="nav-btn" id="nav-zoom-all" title="Zoom All (Double-click middle)">
+            <svg viewBox="0 0 20 20" width="16" height="16"><path fill="currentColor" d="M3 3h4v2H5v2H3V3zm10 0h4v4h-2V5h-2V3zM3 13h2v2h2v2H3v-4zm14 0v4h-4v-2h2v-2h2z"/></svg>
+          </button>
+          <button class="nav-btn" id="nav-orbit" title="Free Orbit (Right-click / Drag)">
+            <svg viewBox="0 0 20 20" width="16" height="16"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="2"/><ellipse cx="10" cy="10" rx="7" ry="2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          </button>
+          <button class="nav-btn" id="nav-lookat" title="Look At Face">
+            <svg viewBox="0 0 20 20" width="16" height="16"><circle cx="10" cy="10" r="3" fill="currentColor"/><path fill="currentColor" d="M10 4C5 4 1.5 10 1.5 10s3.5 6 8.5 6 8.5-6 8.5-6-3.5-6-8.5-6zm0 10a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"/></svg>
+          </button>
+        </div>
+
+        <div id="viewport-hint" class="viewport-hint">Click a primitive to add it, or press S to sketch</div>
+        <div id="mate-status" class="mate-status" hidden></div>
+      </main>
+
+      <!-- Right: Properties Panel -->
+      <aside id="properties-panel">
+        <div class="panel-header">Properties</div>
+        <div id="properties-body" class="properties-body">
+          <div class="empty-state">Nothing selected</div>
+        </div>
+      </aside>
+
+    </div>
+
+    <!-- Inventor File Application Menu Modal / Dropdown -->
+    <div id="file-menu-dropdown" class="file-menu-dropdown hidden">
+      <div class="file-menu-header">
+        <span class="file-menu-title">File Operations</span>
+        <button class="file-menu-close" id="fm-close">×</button>
+      </div>
+      <div class="file-menu-items">
+        <button class="file-menu-item" id="fm-new">
+          <span class="fm-icon">📄</span>
+          <div class="fm-text">
+            <strong>New Part</strong>
+            <small>Create an empty parametric part</small>
+          </div>
+        </button>
+        <button class="file-menu-item" id="fm-open">
+          <span class="fm-icon">📂</span>
+          <div class="fm-text">
+            <strong>Open Project...</strong>
+            <small>Open a .cadlite project file</small>
+          </div>
+        </button>
+        <button class="file-menu-item" id="fm-save">
+          <span class="fm-icon">💾</span>
+          <div class="fm-text">
+            <strong>Save Project...</strong>
+            <small>Save current assembly and features</small>
+          </div>
+        </button>
+        <div class="file-menu-separator"></div>
+        <button class="file-menu-item" id="fm-import-step">
+          <span class="fm-icon">📥</span>
+          <div class="fm-text">
+            <strong>Import STEP (.step, .stp)</strong>
+            <small>Import B-Rep models from CAD / Inventor</small>
+          </div>
+        </button>
+        <button class="file-menu-item" id="fm-export-step">
+          <span class="fm-icon">📤</span>
+          <div class="fm-text">
+            <strong>Export STEP (.step, .stp)</strong>
+            <small>Export solid bodies as AP214 STEP</small>
+          </div>
+        </button>
+        <button class="file-menu-item" id="fm-export-stl">
+          <span class="fm-icon">🔺</span>
+          <div class="fm-text">
+            <strong>Export STL (.stl)</strong>
+            <small>Export triangulated mesh for 3D printing</small>
+          </div>
+        </button>
+        <div class="file-menu-separator"></div>
+        <button class="file-menu-item" id="fm-drawing-sheet">
+          <span class="fm-icon">📐</span>
+          <div class="fm-text">
+            <strong>2D Engineering Drawing (.idw)</strong>
+            <small>Create 4-view orthographic drawing sheet with dimensions</small>
+          </div>
+        </button>
+        <button class="file-menu-item" id="fm-export-dxf">
+          <span class="fm-icon">📏</span>
+          <div class="fm-text">
+            <strong>Export DXF Drawing (.dxf)</strong>
+            <small>AutoCAD DXF vector format for CNC / laser fabrication</small>
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <!-- 2D Engineering Drawing Sheet Modal -->
+    <div id="drawing-modal" class="drawing-modal-backdrop hidden">
+      <div class="drawing-modal-window">
+        <header class="drawing-modal-header">
+          <div class="dm-title">
+            <span class="dm-icon">📐</span>
+            <span class="dm-text">2D Engineering Drawing Sheet &bull; <strong id="dm-sheet-name">Part2.idw</strong></span>
+            <span class="dm-scale-badge" id="dm-sheet-scale">SCALE 1:2</span>
+          </div>
+          <div class="dm-actions">
+            <button class="dm-btn" id="dm-export-dxf" title="Export to AutoCAD DXF for CNC/Laser cutting">
+              <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/></svg>
+              Export DXF
+            </button>
+            <button class="dm-btn" id="dm-export-svg" title="Export Vector Blueprint (SVG)">
+              <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path fill="currentColor" d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+              Export SVG
+            </button>
+            <button class="dm-btn" id="dm-print" title="Print or Save to PDF">
+              <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M2.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1z"/><path fill="currentColor" d="M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2H5zm7 4H4V3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2zm-7 6h6v2a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-2z"/></svg>
+              Print / PDF
+            </button>
+            <button class="dm-close" id="dm-close" title="Close Drawing Sheet">×</button>
+          </div>
+        </header>
+        <div class="drawing-modal-body" id="drawing-modal-body">
+          <!-- SVG sheet rendered dynamically here -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Status Bar -->
+    <footer id="statusbar">
+      <span id="status-left">Ready</span>
+      <span id="status-right">Units: mm</span>
+    </footer>
+
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../node_modules/three/build/three.module.js",
+      "three/addons/": "../node_modules/three/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="renderer.js"></script>
+</body>
+</html>
