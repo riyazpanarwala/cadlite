@@ -22,13 +22,26 @@
     "appId": "com.riyaz.cadlite",
     "productName": "CADLite",
     "win": {
-      "target": "nsis"
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     },
     "files": [
       "main.js",
       "preload.js",
+      "main/**/*",
       "src/**/*",
       "node_modules/**/*"
+    ],
+    "asarUnpack": [
+      "**/*.wasm"
     ]
   }
 }
