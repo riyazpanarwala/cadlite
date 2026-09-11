@@ -47,16 +47,21 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Update Continuous Pre-Release (Push to main)
+      - name: Read version from package.json
+        id: pkg
+        shell: bash
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Create Release on Push to main
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: continuous
-          name: Continuous Build (${{ github.sha }})
+          tag_name: v${{ steps.pkg.outputs.version }}-build.${{ github.run_number }}
+          name: CADLite v${{ steps.pkg.outputs.version }} (Build ${{ github.run_number }})
           body: |
-            Automated continuous build generated from commit ${{ github.sha }}.
+            Automated release for CADLite v${{ steps.pkg.outputs.version }} from commit ${{ github.sha }}.
             Download the installer (.exe) below.
-          prerelease: true
+          prerelease: false
           generate_release_notes: true
           files: |
             dist/*.exe
