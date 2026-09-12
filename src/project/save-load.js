@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Part } from '../assembly/Part.js';
 import { geometryForPrimitive } from '../geometry/primitives.js';
 import { buildExtrudeGeometry } from '../geometry/extrude.js';
+import { buildRevolveGeometry } from '../geometry/revolve.js';
 
 const FORMAT_VERSION = 1;
 
@@ -44,6 +45,8 @@ function buildPartFromData(data) {
     let geometry;
     if (data.kind === 'extrude') {
       geometry = buildExtrudeGeometry(data.params);
+    } else if (data.kind === 'revolve') {
+      geometry = buildRevolveGeometry(data.params);
     } else if (data.kind === 'boolean' || data.kind === 'chamfer' || data.kind === 'fillet' || data.kind === 'step') {
       geometry = buildBooleanGeometry(data.params);
     } else {

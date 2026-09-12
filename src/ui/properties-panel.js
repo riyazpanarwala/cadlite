@@ -13,7 +13,8 @@ const DIM_FIELDS = {
     { key: 'radius', label: 'Radius' },
     { key: 'height', label: 'Height' }
   ],
-  extrude: [{ key: 'depth', label: 'Depth' }]
+  extrude: [{ key: 'depth', label: 'Depth' }],
+  revolve: [{ key: 'angle', label: 'Angle (°)' }]
 };
 
 export class PropertiesPanel {

@@ -10,7 +10,7 @@
 
     <!-- Top Window / Quick Access Bar -->
     <header id="quick-access-bar">
-      <div class="app-button" title="CADLite Application Menu">
+      <div class="app-button" id="app-menu-btn" title="CADLite Application Menu">
         <span class="app-icon">◆</span>
       </div>
       <div class="qa-tools">
@@ -469,7 +469,7 @@
         <div class="model-browser-header">
           <span class="browser-title">Model</span>
           <div class="browser-filter">
-            <button class="browser-tool-btn" title="Filter features">🔍</button>
+            <button class="browser-tool-btn" id="browser-filter-btn" title="Filter features">🔍</button>
           </div>
         </div>
         <div id="tree-root" class="tree-root"></div>
@@ -482,9 +482,9 @@
           <div class="doc-tab active">
             <span class="doc-tab-icon">📄</span>
             <span class="doc-tab-title">Part2</span>
-            <span class="doc-tab-close">×</span>
+            <span class="doc-tab-close" id="doc-tab-close" title="Close Part">×</span>
           </div>
-          <button class="doc-tab-add" title="New Part">+</button>
+          <button class="doc-tab-add" id="doc-tab-add" title="New Part">+</button>
         </div>
 
         <canvas id="viewport-canvas"></canvas>

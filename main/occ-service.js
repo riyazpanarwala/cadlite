@@ -104,6 +104,26 @@ function makeExtrudeShape(oc, params) {
   return new oc.BRepBuilderAPI_Transform_2(solid, trsf, true).Shape();
 }
 
+function makeRevolShape(oc, params) {
+  const { points2D, angle = 360 } = params;
+  const polygon = new oc.BRepBuilderAPI_MakePolygon_1();
+  const uValues = points2D.map(p => p[0]);
+  const minU = Math.min(...uValues);
+  const offsetU = minU < 0 ? -minU : 0;
+
+  for (const [x, y] of points2D) {
+    polygon.Add_1(new oc.gp_Pnt_3(Math.max(0.01, x + offsetU), y, 0));
+  }
+  polygon.Close();
+  const wire = polygon.Wire();
+  const face = new oc.BRepBuilderAPI_MakeFace_15(wire, false).Face();
+
+  const axis = new oc.gp_Ax1_2(new oc.gp_Pnt_3(0, 0, 0), new oc.gp_Dir_4(0, 1, 0));
+  const angleRad = (angle * Math.PI) / 180;
+  const revol = new oc.BRepPrimAPI_MakeRevol_1(face, axis, angleRad, false);
+  return revol.Shape();
+}
+
 function applyChamferToShape(oc, shape, distance = 5, filter = 'all') {
   const chamfer = new oc.BRepFilletAPI_MakeChamfer(shape);
   const exp = new oc.TopExp_Explorer_2(shape, oc.TopAbs_ShapeEnum.TopAbs_EDGE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
@@ -150,6 +170,7 @@ function buildShape(oc, def) {
     case 'cone': shape = makeConeShape(oc, def.params); break;
     case 'sphere': shape = makeSphereShape(oc, def.params); break;
     case 'extrude': shape = makeExtrudeShape(oc, def.params); break;
+    case 'revolve': shape = makeRevolShape(oc, def.params); break;
     case 'chamfer': {
       const base = buildShape(oc, def.params.basePart);
       shape = applyChamferToShape(oc, base, def.params.distance, def.params.filter);

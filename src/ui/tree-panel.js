@@ -9,6 +9,7 @@ const KIND_ICON = {
   chamfer: '◢',
   fillet: '⌒',
   boolean: '∪',
+  revolve: '↻',
   step: '📦',
   group: '📁'
 };
@@ -19,6 +20,8 @@ export class TreePanel {
     this.assembly = assembly;
     this.selection = selection;
     this.viewport = viewport;
+    this.docName = 'Part2';
+    this.filterText = '';
     this.originExpanded = true;
     this.bodiesExpanded = true;
     this.originVisibility = {
@@ -106,16 +109,26 @@ export class TreePanel {
     }
   }
 
+  setDocName(name) {
+    this.docName = name || 'Part2';
+    this.render();
+  }
+
+  setFilter(text) {
+    this.filterText = (text || '').trim().toLowerCase();
+    this.render();
+  }
+
   render() {
     this.rootEl.innerHTML = '';
 
-    // Document Root Node: Part2
+    // Document Root Node: dynamic docName
     const docNode = document.createElement('div');
     docNode.className = 'tree-doc-node';
     docNode.innerHTML = `
       <div class="tree-node doc-header">
         <span class="icon">📦</span>
-        <span class="label doc-title">Part2</span>
+        <span class="label doc-title">${this.docName}</span>
       </div>
     `;
 
@@ -123,7 +136,10 @@ export class TreePanel {
     docChildren.className = 'tree-children';
 
     // 1. Solid Bodies folder
-    const bodies = this.assembly.root.children.filter((c) => c.type === 'part');
+    let bodies = this.assembly.root.children.filter((c) => c.type === 'part');
+    if (this.filterText) {
+      bodies = bodies.filter((b) => (b.name || '').toLowerCase().includes(this.filterText));
+    }
     const bodiesFolder = document.createElement('div');
     bodiesFolder.className = 'tree-folder';
     bodiesFolder.innerHTML = `
@@ -229,6 +245,7 @@ export class TreePanel {
 
     // 4. Feature Tree History Nodes (Extrusion 1, Chamfer 1, etc.)
     for (const child of this.assembly.root.children) {
+      if (this.filterText && !(child.name || '').toLowerCase().includes(this.filterText)) continue;
       docChildren.appendChild(this._buildNode(child));
     }
 

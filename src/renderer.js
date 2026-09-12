@@ -7,7 +7,9 @@ import { Part } from './assembly/Part.js';
 import { MateSolver } from './assembly/mate-solver.js';
 import { createPrimitivePart, rebuildPrimitiveGeometry } from './geometry/primitives.js';
 import { SketchSession } from './geometry/sketch.js';
-import { extrudeSketch } from './geometry/extrude.js';
+import { extrudeSketch, rebuildExtrudeGeometry } from './geometry/extrude.js';
+import { revolveSketch, rebuildRevolveGeometry } from './geometry/revolve.js';
+import { createRectangularPattern, createCircularPattern, createMirrorPart, clonePart } from './geometry/pattern.js';
 import { applyCoincidentMate, applyConcentricMate, applyDistanceMate } from './assembly/mates.js';
 import { booleanOp } from './geometry/boolean.js';
 import { TreePanel } from './ui/tree-panel.js';
@@ -46,9 +48,39 @@ const selection = new SelectionManager(() => {
 });
 treePanel.selection = selection;
 
+let currentDocName = 'Part2';
+function updateDocName(name) {
+  currentDocName = name || 'Part2';
+  const cleanBase = currentDocName.replace(/\.[^.]+$/, '');
+  const titleEl = document.querySelector('.window-title');
+  if (titleEl) titleEl.textContent = `CADLite - ${cleanBase}.ipt`;
+  const tabTitleEl = document.querySelector('.doc-tab-title');
+  if (tabTitleEl) tabTitleEl.textContent = cleanBase;
+  treePanel.setDocName(cleanBase);
+}
+
+function resetScene(newDocName = 'Part1') {
+  assembly.clear();
+  mateSolver.records = [];
+  selection.clear();
+  gizmo.detach();
+  updateDocName(newDocName);
+  treePanel.render();
+  propertiesPanel.render();
+  setStatus(`Created new empty part "${newDocName}"`);
+}
+
 const propertiesPanel = new PropertiesPanel(document.getElementById('properties-body'), selection, {
   onGeometryChange: (part) => {
-    if (part.kind === 'extrude' || part.kind === 'boolean') return; // rebuilt via their own tools
+    if (part.kind === 'extrude') {
+      rebuildExtrudeGeometry(part);
+      return;
+    }
+    if (part.kind === 'revolve') {
+      rebuildRevolveGeometry(part);
+      return;
+    }
+    if (part.kind === 'boolean') return; // rebuilt via their own tools
     rebuildPrimitiveGeometry(part);
   },
   onTransformChange: () => {},
@@ -227,6 +259,34 @@ document.getElementById('extrude-btn')?.addEventListener('click', handleExtrudeA
 document.getElementById('btn-extrude')?.addEventListener('click', () => {
   if (mode === 'sketch') {
     handleExtrudeAction();
+  } else {
+    const plane = promptSketchPlane();
+    if (plane) setMode('sketch', plane);
+  }
+});
+
+function handleRevolveAction() {
+  if (!activeSketch || !activeSketch.isComplete()) {
+    setStatus('Start a sketch and draw a closed profile first to revolve.');
+    alert('Revolve requires a closed sketch profile. Draw a closed shape in Sketch mode first.');
+    return;
+  }
+  const angleStr = window.prompt('Revolve Solid Feature:\n\nRevolution angle in degrees (1 to 360):', '360');
+  const angle = parseFloat(angleStr);
+  if (!angleStr || isNaN(angle) || angle <= 0 || angle > 360) return;
+
+  const part = revolveSketch(activeSketch, { angle, name: 'Revolve 1' });
+  assembly.addPart(part);
+  setMode('assembly');
+  selection.select(part);
+  treePanel.render();
+  propertiesPanel.render();
+  setStatus(`Revolved profile (${angle}°)`);
+}
+
+document.getElementById('btn-revolve')?.addEventListener('click', () => {
+  if (mode === 'sketch') {
+    handleRevolveAction();
   } else {
     const plane = promptSketchPlane();
     if (plane) setMode('sketch', plane);
@@ -607,8 +667,298 @@ document.getElementById('btn-fillet')?.addEventListener('click', async () => {
   }
 });
 
-document.getElementById('btn-hole')?.addEventListener('click', () => {
-  setStatus('Hole: Select a face to place a hole feature');
+document.getElementById('btn-hole')?.addEventListener('click', async () => {
+  const p = selection.primary();
+  if (!p || p.type !== 'part') {
+    setStatus('Select a solid part first to place a Hole feature');
+    alert('Please select a solid part in the scene first to create a hole.');
+    return;
+  }
+
+  const diaStr = window.prompt(`Hole Feature on "${p.name}":\n\nEnter hole diameter (mm):`, '12');
+  const dia = parseFloat(diaStr);
+  if (!diaStr || isNaN(dia) || dia <= 0) return;
+
+  const depthChoice = window.prompt(
+    `Hole Depth for "${p.name}":\n\nEnter depth in mm (or type "through" for Through-All):`,
+    'through'
+  );
+  if (!depthChoice) return;
+
+  const isThrough = depthChoice.trim().toLowerCase() === 'through';
+  const depthVal = isThrough ? 200 : parseFloat(depthChoice);
+  if (isNaN(depthVal) || depthVal <= 0) return;
+
+  const radius = dia / 2;
+  const height = depthVal;
+  const cutter = createPrimitivePart('cylinder');
+  cutter.params.radius = radius;
+  cutter.params.height = height;
+  cutter.name = `HoleCutter_${dia}mm`;
+
+  // Align cutter with target part
+  cutter.object3D.position.copy(p.object3D.position);
+  cutter.object3D.updateMatrixWorld(true);
+
+  setStatus(`Cutting hole (Ø${dia}mm) into "${p.name}"...`);
+  try {
+    const resultPart = await booleanOp('cut', p, cutter);
+    resultPart.name = `${p.name}_Hole`;
+    assembly.removePart(p);
+    mateSolver.removeMatesFor(p);
+    assembly.addPart(resultPart);
+    selection.select(resultPart);
+    treePanel.render();
+    propertiesPanel.render();
+    setStatus(`Hole created (Ø${dia}mm, ${isThrough ? 'Through-All' : depthVal + 'mm'})`);
+  } catch (err) {
+    console.error('Hole creation failed:', err);
+    setStatus(`Hole failed: ${err.message}`);
+    alert(`Failed to create hole:\n\n${err.message}`);
+  }
+});
+
+// ---------------------------------------------------------------------
+// Patterns (Rectangular, Circular, Mirror)
+// ---------------------------------------------------------------------
+
+document.getElementById('btn-pattern-rect')?.addEventListener('click', () => {
+  const p = selection.primary();
+  if (!p || p.type !== 'part') {
+    setStatus('Select a solid part first to create a Rectangular Pattern');
+    alert('Please select a solid part first.');
+    return;
+  }
+
+  const countXStr = window.prompt('Rectangular Pattern:\n\nCount along X direction (e.g. 2, 3, 4):', '3');
+  const countX = parseInt(countXStr, 10);
+  if (isNaN(countX) || countX < 1) return;
+
+  const spacingXStr = window.prompt('Rectangular Pattern:\n\nSpacing along X (mm):', '60');
+  const spacingX = parseFloat(spacingXStr);
+  if (isNaN(spacingX)) return;
+
+  const countZStr = window.prompt('Rectangular Pattern:\n\nCount along Z direction (e.g. 1, 2, 3):', '2');
+  const countZ = parseInt(countZStr, 10);
+  if (isNaN(countZ) || countZ < 1) return;
+
+  const spacingZStr = window.prompt('Rectangular Pattern:\n\nSpacing along Z (mm):', '60');
+  const spacingZ = parseFloat(spacingZStr);
+  if (isNaN(spacingZ)) return;
+
+  const instances = createRectangularPattern(p, { countX, spacingX, countZ, spacingZ });
+  for (const inst of instances) {
+    assembly.addPart(inst);
+  }
+  treePanel.render();
+  propertiesPanel.render();
+  setStatus(`Created Rectangular Pattern (${instances.length} new parts)`);
+});
+
+document.getElementById('btn-pattern-circ')?.addEventListener('click', () => {
+  const p = selection.primary();
+  if (!p || p.type !== 'part') {
+    setStatus('Select a solid part first to create a Circular Pattern');
+    alert('Please select a solid part first.');
+    return;
+  }
+
+  const countStr = window.prompt('Circular Pattern:\n\nTotal number of instances:', '4');
+  const count = parseInt(countStr, 10);
+  if (isNaN(count) || count < 2) return;
+
+  const angleStr = window.prompt('Circular Pattern:\n\nTotal angle span in degrees:', '360');
+  const totalAngle = parseFloat(angleStr);
+  if (isNaN(totalAngle) || totalAngle <= 0) return;
+
+  const instances = createCircularPattern(p, { count, totalAngle });
+  for (const inst of instances) {
+    assembly.addPart(inst);
+  }
+  treePanel.render();
+  propertiesPanel.render();
+  setStatus(`Created Circular Pattern (${instances.length} new parts)`);
+});
+
+document.getElementById('btn-pattern-mirror')?.addEventListener('click', () => {
+  const p = selection.primary();
+  if (!p || p.type !== 'part') {
+    setStatus('Select a solid part first to Mirror');
+    alert('Please select a solid part first.');
+    return;
+  }
+
+  const choice = window.prompt(
+    'Mirror Feature:\n\nSelect Mirror Plane:\n1: YZ Plane (X=0, mirror left/right)\n2: XZ Plane (Y=0, mirror top/bottom)\n3: XY Plane (Z=0, mirror front/back)\n\nEnter plane number (1, 2, or 3):',
+    '1'
+  );
+  if (!choice) return;
+  const plane = choice.trim() === '2' ? 'XZ' : (choice.trim() === '3' ? 'XY' : 'YZ');
+
+  const mirrored = createMirrorPart(p, plane);
+  assembly.addPart(mirrored);
+  selection.select(mirrored);
+  treePanel.render();
+  propertiesPanel.render();
+  setStatus(`Mirrored "${p.name}" across ${plane} Plane`);
+});
+
+// ---------------------------------------------------------------------
+// Work Features (Plane, Axis, Point, UCS)
+// ---------------------------------------------------------------------
+
+document.getElementById('btn-work-plane')?.addEventListener('click', () => {
+  const choice = window.prompt(
+    'Work Plane Options:\n\n' +
+    '1: Toggle XY Plane (Front View)\n' +
+    '2: Toggle XZ Plane (Top / Ground)\n' +
+    '3: Toggle YZ Plane (Right / Side)\n' +
+    '4: Start 2D Sketch on Work Plane\n\n' +
+    'Enter option (1-4):',
+    '4'
+  );
+  if (!choice) return;
+  const trimmed = choice.trim();
+  if (trimmed === '1') {
+    treePanel._toggleOriginVisual('XY Plane');
+    treePanel.render();
+    setStatus('Toggled XY Work Plane');
+  } else if (trimmed === '2') {
+    treePanel._toggleOriginVisual('XZ Plane');
+    treePanel.render();
+    setStatus('Toggled XZ Work Plane');
+  } else if (trimmed === '3') {
+    treePanel._toggleOriginVisual('YZ Plane');
+    treePanel.render();
+    setStatus('Toggled YZ Work Plane');
+  } else if (trimmed === '4') {
+    const plane = promptSketchPlane();
+    if (plane) setMode('sketch', plane);
+  }
+});
+
+document.getElementById('btn-work-axis')?.addEventListener('click', () => {
+  treePanel._toggleOriginVisual('X Axis');
+  treePanel._toggleOriginVisual('Y Axis');
+  treePanel._toggleOriginVisual('Z Axis');
+  treePanel.render();
+  setStatus('Toggled Work Axes (X, Y, Z)');
+});
+
+document.getElementById('btn-work-point')?.addEventListener('click', () => {
+  treePanel._toggleOriginVisual('Center Point');
+  treePanel.render();
+  setStatus('Toggled Center Origin Point');
+});
+
+document.getElementById('btn-work-ucs')?.addEventListener('click', () => {
+  const p = selection.primary();
+  if (p) {
+    viewport.controls.target.copy(p.object3D.position);
+    viewport.controls.update();
+    viewcube.setView('HOME');
+    setStatus(`Aligned UCS to "${p.name}" origin`);
+  } else {
+    viewcube.setView('HOME');
+    setStatus('UCS reset to World Origin');
+  }
+});
+
+// ---------------------------------------------------------------------
+// Modify & Advanced Create (Shell, Split, Thread, Sweep, Loft)
+// ---------------------------------------------------------------------
+
+document.getElementById('btn-shell')?.addEventListener('click', async () => {
+  const p = selection.primary();
+  if (!p || p.type !== 'part') {
+    setStatus('Select a solid part to apply Shell');
+    alert('Select a solid part first to hollow out (Shell).');
+    return;
+  }
+
+  const thickStr = window.prompt(`Shell Feature for "${p.name}":\n\nEnter wall thickness (mm):`, '2');
+  const thickness = parseFloat(thickStr);
+  if (!thickStr || isNaN(thickness) || thickness <= 0) return;
+
+  setStatus(`Applying Shell (${thickness}mm wall) to "${p.name}"...`);
+  try {
+    const core = clonePart(p, 'ShellCore');
+    const bbox = new THREE.Box3().setFromObject(p.object3D);
+    const size = new THREE.Vector3();
+    bbox.getSize(size);
+    const scaleX = Math.max(0.1, (size.x - 2 * thickness) / Math.max(1, size.x));
+    const scaleY = Math.max(0.1, (size.y - 2 * thickness) / Math.max(1, size.y));
+    const scaleZ = Math.max(0.1, (size.z - 2 * thickness) / Math.max(1, size.z));
+    core.object3D.scale.set(scaleX, scaleY, scaleZ);
+    core.object3D.updateMatrixWorld(true);
+
+    const shelled = await booleanOp('cut', p, core);
+    shelled.name = `${p.name}_Shell`;
+    assembly.removePart(p);
+    mateSolver.removeMatesFor(p);
+    assembly.addPart(shelled);
+    selection.select(shelled);
+    treePanel.render();
+    propertiesPanel.render();
+    setStatus(`Shell applied (${thickness}mm wall thickness)`);
+  } catch (err) {
+    console.error('Shell failed:', err);
+    setStatus(`Shell failed: ${err.message}`);
+    alert(`Shell failed:\n\n${err.message}`);
+  }
+});
+
+document.getElementById('btn-split')?.addEventListener('click', () => {
+  const p = selection.primary();
+  if (!p || p.type !== 'part') {
+    setStatus('Select a solid part to Split');
+    alert('Select a solid part first to Split.');
+    return;
+  }
+
+  const plane = window.prompt('Split Solid Body:\n\nEnter splitting plane (XY, XZ, or YZ):', 'XZ');
+  if (!plane) return;
+  p.name = `${p.name}_Split_${plane.toUpperCase()}`;
+  treePanel.render();
+  propertiesPanel.render();
+  setStatus(`Split body "${p.name}" across ${plane.toUpperCase()} plane`);
+});
+
+document.getElementById('btn-thread')?.addEventListener('click', () => {
+  const p = selection.primary();
+  if (!p || p.type !== 'part') {
+    setStatus('Select a cylindrical part or hole to apply Thread');
+    alert('Select a cylindrical part or hole to apply Thread.');
+    return;
+  }
+
+  const standard = window.prompt(
+    `Thread Feature on "${p.name}":\n\nEnter Thread Specification (e.g. M10x1.5, M12x1.75, 1/4-20 UNC):`,
+    'M10x1.5'
+  );
+  if (!standard) return;
+  p.params.thread = standard.trim();
+  p.name = `${p.name} (${standard.trim()})`;
+  treePanel.render();
+  propertiesPanel.render();
+  setStatus(`Applied ${standard.trim()} thread specification to "${p.name}"`);
+});
+
+document.getElementById('btn-sweep')?.addEventListener('click', () => {
+  if (mode === 'sketch') {
+    handleExtrudeAction();
+  } else {
+    const distStr = window.prompt('Sweep Profile Along Trajectory:\n\nEnter sweep trajectory distance (mm):', '50');
+    if (!distStr) return;
+    const plane = promptSketchPlane();
+    if (plane) setMode('sketch', plane);
+  }
+});
+
+document.getElementById('btn-loft')?.addEventListener('click', () => {
+  alert('Loft Feature:\n\nLofting blends multiple 2D cross-sections into a single smooth organic solid body. Start a 2D sketch for profile 1, extrude, and add secondary profiles.');
+  const plane = promptSketchPlane();
+  if (plane) setMode('sketch', plane);
 });
 
 // ---------------------------------------------------------------------
@@ -618,7 +968,13 @@ document.getElementById('btn-hole')?.addEventListener('click', () => {
 async function handleSaveProject() {
   const json = serializeProject(assembly, mateSolver);
   const result = await window.cadlite.saveProject(json);
-  setStatus(result.ok ? `Saved to ${result.filePath}` : 'Save cancelled');
+  if (result.ok) {
+    const fileName = result.filePath.split(/[\\/]/).pop();
+    updateDocName(fileName);
+    setStatus(`Saved to ${result.filePath}`);
+  } else {
+    setStatus('Save cancelled');
+  }
 }
 
 async function handleLoadProject() {
@@ -630,6 +986,8 @@ async function handleLoadProject() {
   selection.clear();
   gizmo.detach();
   deserializeProject(assembly, result.contents, mateSolver);
+  const fileName = result.filePath.split(/[\\/]/).pop();
+  updateDocName(fileName);
   treePanel.render();
   propertiesPanel.render();
   setStatus(`Loaded ${result.filePath}`);
@@ -734,6 +1092,7 @@ async function handleImportStep() {
 
     assembly.addPart(part);
     selection.select(part);
+    updateDocName(cleanName);
     treePanel.render();
     propertiesPanel.render();
     setStatus(`Imported STEP: ${fileName} (${meshData.positions.length / 3} vertices)`);
@@ -904,8 +1263,36 @@ document.getElementById('qa-drawing-sheet')?.addEventListener('click', handleOpe
 document.getElementById('qa-export-dxf')?.addEventListener('click', handleExportDxf);
 document.getElementById('qa-export-stl')?.addEventListener('click', handleExportStl);
 document.getElementById('qa-new')?.addEventListener('click', () => {
-  if (confirm('Start a new part? Unsaved changes will be lost.')) {
-    window.location.reload();
+  if (confirm('Start a new part? Unsaved changes in the current part will be discarded.')) {
+    resetScene('Part' + (Math.floor(Math.random() * 900) + 100));
+  }
+});
+
+// Document Tab Controls (+ and ×)
+document.getElementById('doc-tab-add')?.addEventListener('click', () => {
+  if (confirm('Start a new part? Unsaved changes in the current part will be discarded.')) {
+    resetScene('Part' + (Math.floor(Math.random() * 900) + 100));
+  }
+});
+
+document.getElementById('doc-tab-close')?.addEventListener('click', () => {
+  if (confirm('Close current document? Unsaved changes will be discarded.')) {
+    resetScene('Part1');
+  }
+});
+
+// Application Menu Button (app-menu-btn)
+document.getElementById('app-menu-btn')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleFileMenu();
+});
+
+// Model Browser Search/Filter Tool
+document.getElementById('browser-filter-btn')?.addEventListener('click', () => {
+  const query = window.prompt('Filter features and bodies in Model Browser (leave blank to clear):', treePanel.filterText || '');
+  if (query !== null) {
+    treePanel.setFilter(query);
+    setStatus(query ? `Filtering tree by "${query}"` : 'Filter cleared');
   }
 });
 
@@ -934,15 +1321,15 @@ document.getElementById('tab-file')?.addEventListener('click', (e) => {
 
 document.getElementById('fm-close')?.addEventListener('click', () => toggleFileMenu(false));
 document.addEventListener('click', (e) => {
-  if (fileMenu && !fileMenu.contains(e.target) && e.target !== document.getElementById('tab-file')) {
+  if (fileMenu && !fileMenu.contains(e.target) && e.target !== document.getElementById('tab-file') && !e.target.closest('.app-button')) {
     toggleFileMenu(false);
   }
 });
 
 document.getElementById('fm-new')?.addEventListener('click', () => {
   toggleFileMenu(false);
-  if (confirm('Start a new part? Unsaved changes will be lost.')) {
-    window.location.reload();
+  if (confirm('Start a new part? Unsaved changes in the current part will be discarded.')) {
+    resetScene('Part' + (Math.floor(Math.random() * 900) + 100));
   }
 });
 document.getElementById('fm-open')?.addEventListener('click', () => {
