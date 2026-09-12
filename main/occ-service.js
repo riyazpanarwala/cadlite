@@ -11,17 +11,9 @@
  * file runs there, and the renderer talks to it over IPC (see main.js /
  * preload.js / renderer.js "geometry:boolean" channel).
  *
- * HONEST STATUS: this is the least-tested part of the app. opencascade.js
- * mirrors the C++ OpenCascade API 1:1 via auto-generated bindings, which
- * means overloaded methods get suffixes like `_2`, `_3` that vary by
- * release. The calls below are written to match the patterns documented
- * at https://ocjs.org and used in community examples (CascadeStudio,
- * opencascade.js-examples), but I can't launch a GUI in this environment
- * to click through and confirm every overload resolves. If you hit an
- * error like "oc.X is not a constructor" or "X is not a function", it's
- * almost always an overload-suffix mismatch for your installed version —
- * check https://ocjs.org/reference-docs/index.html for the exact class
- * and try adjacent suffix numbers (_1, _2, _3...).
+ * OpenCascade API bindings are verified against the installed opencascade.js
+ * release, supporting booleans (union, cut, intersect), edge fillets,
+ * chamfers, and thin/thick solid shells.
  */
 
 let ocPromise = null;

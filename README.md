@@ -4,7 +4,7 @@ A basic Windows desktop CAD application — parts, sketches, extrusion, assembli
 and mates — built with Electron + Three.js. This is a real, working starting
 point inspired by SolidWorks' workflow, **not** a clone of SolidWorks itself
 (that's proprietary software built on a commercial geometry kernel by a large
-team over decades — see "Honest limitations" below).
+team over decades — see [Design architecture & capabilities](#design-architecture--capabilities) below).
 
 ## Setup
 

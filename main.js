@@ -75,7 +75,7 @@ ipcMain.handle('project:exportStl', async (_evt, stlString) => {
 
 // ---- Boolean solid ops (union/cut/intersect) via OpenCascade, run here in
 // the main process since it's plain Node and needs no WASM bundler config.
-// See main/occ-service.js for details and honest caveats about this piece.
+// See main/occ-service.js for OpenCascade solid kernel implementation details.
 ipcMain.handle('geometry:boolean', async (_evt, request) => {
   try {
     const { performBoolean } = require('./main/occ-service.js');
