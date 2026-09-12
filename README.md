@@ -28,31 +28,27 @@ Uses `electron-builder` (configured in `package.json`) to produce an NSIS
 installer under `dist/`. You'll want to add a real app icon (`build/icon.ico`)
 and set `"icon"` in the `build.win` config before shipping this to anyone else.
 
-## What it can do today
+## UI Reference Guide
 
-- **Primitives**: box, cylinder, sphere, cone — click a toolbar button to drop
-  one into the scene, then edit exact dimensions in the Properties panel.
-- **Sketch → Extrude**: switch to Sketch mode (`S`), draw a line/rect/circle
-  profile on the ground plane, then Extrude it into a solid part.
-- **Drag to move/rotate/scale**: click a part to select it, then drag the
-  gizmo handles (Move/Rotate/Scale in the toolbar, or `G`/`R`/`X` shortcuts).
-- **Assembly tree**: every part appears in the left tree; select in the tree
-  or click in the viewport (Shift-click to multi-select); toggle visibility.
-- **Grouping**: select 2+ parts → "Group Selected" to nest them into a
-  sub-assembly (world position is preserved on re-parenting).
-- **Live mates**: select exactly two parts, then apply Coincident (snap
-  origins together), Concentric (align centerlines), or Distance (fixed
-  offset). Unlike a one-time snap, mated parts stay rigidly locked together
-  every frame — drag the driver part and the mated part follows. See
-  "Honest limitations" below for what this does and doesn't do.
-- **Boolean solids**: select two solid parts, then Union / Cut / Intersect
-  to combine them into real boundary-represented (not just visually
-  overlapping) geometry, computed by OpenCascade. Runs in the Electron main
-  process — see `main/occ-service.js`.
-- **Save / Load**: full project tree (hierarchy, transforms, dimensions,
-  colors, mates) serializes to a `.json` project file via native OS dialogs.
-- **Export STL**: dumps the current assembly to an ASCII STL for 3D printing
-  or viewing elsewhere.
+For a complete, button-by-button manual covering every tool, workflow, and dialog, see **[docs/UI_REFERENCE.md](docs/UI_REFERENCE.md)**.
+
+## What it can do
+
+- **Primitives**: Box, cylinder, sphere, cone — click to place, then edit exact parametric dimensions in the Properties panel.
+- **Multi-Plane 2D Sketching**: Start a 2D sketch (`S`) on XY, XZ, or YZ planes with aligned grid helpers and perpendicular view snapping.
+- **2D Constraints & Dimensioning**: Numerical constraint solver supporting distance dimensions (`D`), horizontal (`H`), vertical (`V`), coincident, perpendicular, parallel, equal, and fixed anchor constraints.
+- **Extrude & Revolve**: Extrude profiles with custom depth and normal/symmetric directions; Revolve profiles around axes up to 360°.
+- **Fillet & Chamfer**: OpenCascade B-Rep edge rounding and chamfering with selective edge filtering.
+- **Hole Tool**: Parametric hole placement with custom diameter and through-all/custom depth cutting.
+- **Patterns**: Rectangular grid patterns, circular radial arrays, and principal plane mirroring.
+- **Work Features**: Datum planes, 3D coordinate axes, and UCS alignment.
+- **Boolean Solids**: True B-Rep Union, Cut (Subtract), and Intersect powered by OpenCascade.
+- **STEP CAD Interoperability**: Full import and export of standard ISO-10303 AP214 STEP files (`.step`, `.stp`).
+- **2D Engineering Drawing Sheets**: Automated 4-view orthographic blueprint sheets (Top, Front, Right, Isometric) with dimensions, title block, and direct export to AutoCAD DXF (`.dxf`), SVG (`.svg`), and Print/PDF.
+- **Live Assembly Mates**: Coincident, concentric, and distance mates with continuous real-time frame locking.
+- **3D Gizmo & ViewCube**: Interactive 3D translation/rotation/scale gizmos and a synchronized 3D navigation cube and triad.
+- **Save / Load**: Full project serialization to `.cadlite.json` via native OS dialogs.
+- **Export STL**: Triangulated mesh export for 3D printing.
 
 ## What's been tested vs. what hasn't
 
