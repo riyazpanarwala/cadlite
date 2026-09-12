@@ -38,7 +38,11 @@
       "preload.js",
       "main/**/*",
       "src/**/*",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      {
+        "from": "node_modules/three/examples/jsm",
+        "to": "node_modules/three/examples/jsm"
+      }
     ],
     "asarUnpack": [
       "**/*.wasm"
