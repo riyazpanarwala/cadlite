@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('cadlite', {
   booleanOp: (request) => ipcRenderer.invoke('geometry:boolean', request),
   chamferOp: (request) => ipcRenderer.invoke('geometry:chamfer', request),
   filletOp: (request) => ipcRenderer.invoke('geometry:fillet', request),
+  shellOp: (request) => ipcRenderer.invoke('geometry:shell', request),
   exportStep: (parts) => ipcRenderer.invoke('step:export', parts),
   importStep: () => ipcRenderer.invoke('step:import'),
   exportDxf: (dxfString) => ipcRenderer.invoke('drawing:exportDxf', dxfString),

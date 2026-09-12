@@ -140,12 +140,19 @@ The tab bar beneath the header organizes tools into contextual ribbons:
     4. Automatically generates a cutter cylinder and executes a boolean cut.
 - **Join / Union (`#btn-bool-union`)**:
   - Combines two selected solid parts into one continuous volume using OpenCascade `BRepAlgoAPI_Fuse`.
+  - **Recursive & Chainable**: Supports boolean operations on previously booleaned, filleted, chamfered, and shelled parts via nested OpenCascade CSG trees.
 - **Cut / Subtract (`#btn-bool-cut`)**:
   - Subtracts the second selected part from the first selected part using OpenCascade `BRepAlgoAPI_Cut`.
+  - **Recursive & Chainable**: Allows multi-stage boolean cuts into compound geometry.
 - **Intersect (`#btn-bool-intersect`)**:
   - Computes the intersection volume between two selected solid bodies using OpenCascade `BRepAlgoAPI_Common`.
 - **Shell (`#btn-shell`)**:
-  - Hollows out the selected solid body to a user-specified wall thickness (e.g. `2 mm`).
+  - **How it works**: Hollows out a solid body with a uniform wall thickness using OpenCascade's native `BRepOffsetAPI_MakeThickSolid`.
+  - **Workflow**:
+    1. Select a solid part in the scene.
+    2. Click **Shell** → enter wall thickness in mm (e.g. `2 mm`).
+    3. Choose mode: `[OK]` for Open Container (automatically removes top face), `[Cancel]` for Enclosed Hollow Cavity.
+    4. Computes true offset B-Rep solid geometry and replaces the part in the assembly.
 - **Split (`#btn-split`)**:
   - Divides a solid body across a selected plane (`XY`, `XZ`, or `YZ`).
 - **Thread (`#btn-thread`)**:
@@ -262,9 +269,13 @@ The tab bar beneath the header organizes tools into contextual ribbons:
 
 - **Coincident (`#mate-coincident`)**:
   - Snaps Part B's origin onto Part A's origin and rigidly locks them together.
-  - A continuous frame loop keeps Part B locked to Part A whenever Part A is moved with the gizmo.
+  - A continuous real-time solver keeps Part B locked to Part A whenever Part A is moved with the gizmo.
 - **Concentric (`#mate-concentric`)**:
-  - Aligns the centerlines (X/Y) of Part B with Part A.
+  - **Multi-DOF Kinematic Articulation**: Aligns the cylindrical centerlines of Part B and Part A.
+  - **Allowed Degrees of Freedom (2 DOFs)**:
+    1. **Axial Slide**: Part B is free to translate smoothly along the shared cylinder centerline.
+    2. **Axial Spin**: Part B is free to rotate around the shared cylinder axis.
+  - **Interaction**: The 3D Gizmo attaches directly to the driven part, allowing interactive sliding and spinning. Any off-axis radial displacement or tilting is continuously projected back into collinear alignment. Moving the driver part moves the driven part while preserving its current slide and spin offsets.
 - **Distance (`#mate-distance`)**:
   - Prompts for separation distance in mm (e.g. `20 mm`) and locks Part B at that exact distance along the offset axis.
 
@@ -355,6 +366,14 @@ When a part is selected, the right sidebar displays editable properties:
     - **Revolve**: `Angle (°)` (regenerates revolution mesh)
 - **STEP Solid Info**:
   - Visible when a STEP CAD model is selected; displays ISO standard (`ISO-10303 AP214`), total vertex count, and triangle count.
+- **Boolean CSG Solid Info**:
+  - Visible when a boolean solid is selected; displays the operation (`UNION`, `CUT`, or `INTERSECT`), recursive chainable status (`True (Recursive OCC)`), and mesh triangle count.
+- **Chamfer Feature Info**:
+  - Visible when a chamfered part is selected; displays chamfer distance in mm and edge filter (`all`, `vertical`, `horizontal`).
+- **Fillet Feature Info**:
+  - Visible when a filleted part is selected; displays fillet radius in mm and edge filter (`all`, `vertical`).
+- **Shell Feature Info**:
+  - Visible when a shelled solid is selected; displays wall thickness in mm and shell style (`Open Top` container vs. `Closed Cavity`).
 
 ---
 

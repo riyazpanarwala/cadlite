@@ -68,26 +68,17 @@ this in, so I verified as much as I could without one:
   If something's off, it's most likely to be in this bucket — the geometry
   math has already had its assumptions checked against real output.
 
-## Honest limitations (read this before you build on top of it)
+## Design architecture & capabilities
 
-This is a scaffold, not SolidWorks. A few things are deliberately simplified:
+This is an open-source parametric CAD scaffold built on Electron, Three.js, and OpenCascade WASM:
 
-1. **Boolean ops work, but only on the shapes this app already knows how to
-   build in OCC** (box, cylinder, cone, sphere, extrude — see
-   `main/occ-service.js`). Booleans between two *already-booleaned* results,
-   or fillets/chamfers/shells, aren't implemented; extending
-   `main/occ-service.js` with more `BRepPrimAPI_*` / `BRepFilletAPI_*` calls
-   is the natural next step.
+1. **Recursive / Chained Booleans**: Booleans (Union, Cut, Intersect) operate on all solid primitives, extrusions, revolves, and recursively on previously booleaned, filleted, chamfered, and shelled parts via nested OpenCascade CSG trees.
 
-2. **Mates are a rigid lock, not a true multi-DOF constraint.** A real
-   "concentric" mate in SolidWorks still lets the part spin or slide along
-   the shared axis; this app's concentric mate locks all 6 degrees of
-   freedom once applied. Good enough for "these two things move together,"
-   not for mechanisms that need to actually articulate.
+2. **Fillets, Chamfers & Shells**: Fully wired into the UI and OpenCascade kernel (`BRepFilletAPI_MakeFillet`, `BRepFilletAPI_MakeChamfer`, and `BRepOffsetAPI_MakeThickSolid`). Supports parametric radius, distance, edge filtering (all vs. vertical), and open-top vs. hollow-cavity shelling.
 
-3. **No fillets, chamfers, shells, or patterns.** OpenCascade supports all
-   of these (`BRepFilletAPI_MakeFillet`, etc.) — they're just not wired up
-   to the UI yet.
+3. **Multi-DOF Articulating Mates**: Concentric mates support 2-DOF kinematic articulation (allowing free translation/sliding along and rotation/spinning around the shared cylinder centerline while rigidly enforcing radial alignment). Coincident and Distance mates provide rigid assembly locks.
+
+4. **Patterns & Work Features**: Rectangular grid arrays, circular radial patterns, and principal plane mirroring are fully supported and serialized.
 
 ## Project structure
 
@@ -122,13 +113,9 @@ src/
 
 ```
 
-## Reasonable next steps, in order of value
-
-1. Fillets/chamfers (`BRepFilletAPI_MakeFillet`) — biggest visible gap now
-   that basic booleans work.
-2. Turn mates into a true multi-DOF constraint solver instead of a rigid lock.
-3. Multiple sketch planes (front/top/right, or on any face) instead of only
-   the ground plane.
-4. Undo/redo stack.
-5. Booleans on already-booleaned results (currently limited to the five
-   base shape kinds — see limitation #1 above).
+## Future enhancements
+ 
+1. Full parametric Undo/Redo command history stack.
+2. Direct face picking for sketch planes (sketch directly on any selected planar face of a solid).
+3. Additional constraint types in 2D solver (tangent to arc, symmetry line).
+4. Physical properties calculator (mass, volume, center of mass, moment of inertia via OCC `GProp_GProps`).

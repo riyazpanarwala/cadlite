@@ -46,7 +46,92 @@ export class PropertiesPanel {
 
     if (part.kind === 'step' && part.params && part.params.mesh) {
       this.rootEl.appendChild(this._stepDetailsGroup(part));
+    } else if (part.kind === 'boolean') {
+      this.rootEl.appendChild(this._booleanDetailsGroup(part));
+    } else if (part.kind === 'chamfer') {
+      this.rootEl.appendChild(this._chamferDetailsGroup(part));
+    } else if (part.kind === 'fillet') {
+      this.rootEl.appendChild(this._filletDetailsGroup(part));
+    } else if (part.kind === 'shell') {
+      this.rootEl.appendChild(this._shellDetailsGroup(part));
     }
+  }
+
+  _booleanDetailsGroup(part) {
+    const g = this._group('Boolean CSG Solid');
+    const op = (part.params && (part.params.sourceOp || part.params.op)) || 'boolean';
+    const triCount = part.params && part.params.mesh ? (part.params.mesh.index.length / 3) : 0;
+
+    const row1 = document.createElement('div');
+    row1.className = 'prop-row';
+    row1.innerHTML = `<label>Operation</label><span style="font-family:var(--font-mono);font-size:11px;color:#c084fc;text-transform:uppercase;font-weight:bold;">${op}</span>`;
+    g.appendChild(row1);
+
+    const row2 = document.createElement('div');
+    row2.className = 'prop-row';
+    row2.innerHTML = `<label>Chainable</label><span style="font-family:var(--font-mono);font-size:11px;color:#38bdf8;">True (Recursive OCC)</span>`;
+    g.appendChild(row2);
+
+    const row3 = document.createElement('div');
+    row3.className = 'prop-row';
+    row3.innerHTML = `<label>Triangles</label><span style="font-family:var(--font-mono);font-size:11px;">${triCount}</span>`;
+    g.appendChild(row3);
+
+    return g;
+  }
+
+  _chamferDetailsGroup(part) {
+    const g = this._group('Chamfer Feature');
+    const dist = (part.params && (part.params.chamferDistance || part.params.distance)) || 5;
+    const filter = (part.params && part.params.filter) || 'all';
+
+    const row1 = document.createElement('div');
+    row1.className = 'prop-row';
+    row1.innerHTML = `<label>Distance</label><span style="font-family:var(--font-mono);font-size:11px;color:#38bdf8;">${dist} mm</span>`;
+    g.appendChild(row1);
+
+    const row2 = document.createElement('div');
+    row2.className = 'prop-row';
+    row2.innerHTML = `<label>Edge Filter</label><span style="font-family:var(--font-mono);font-size:11px;">${filter}</span>`;
+    g.appendChild(row2);
+
+    return g;
+  }
+
+  _filletDetailsGroup(part) {
+    const g = this._group('Fillet Feature');
+    const radius = (part.params && (part.params.filletRadius || part.params.radius)) || 3;
+    const filter = (part.params && part.params.filter) || 'all';
+
+    const row1 = document.createElement('div');
+    row1.className = 'prop-row';
+    row1.innerHTML = `<label>Radius</label><span style="font-family:var(--font-mono);font-size:11px;color:#38bdf8;">R${radius} mm</span>`;
+    g.appendChild(row1);
+
+    const row2 = document.createElement('div');
+    row2.className = 'prop-row';
+    row2.innerHTML = `<label>Edge Filter</label><span style="font-family:var(--font-mono);font-size:11px;">${filter}</span>`;
+    g.appendChild(row2);
+
+    return g;
+  }
+
+  _shellDetailsGroup(part) {
+    const g = this._group('Shell Feature');
+    const thickness = (part.params && part.params.thickness) || 2;
+    const openFace = (part.params && part.params.openFace !== false);
+
+    const row1 = document.createElement('div');
+    row1.className = 'prop-row';
+    row1.innerHTML = `<label>Wall</label><span style="font-family:var(--font-mono);font-size:11px;color:#38bdf8;">${thickness} mm</span>`;
+    g.appendChild(row1);
+
+    const row2 = document.createElement('div');
+    row2.className = 'prop-row';
+    row2.innerHTML = `<label>Style</label><span style="font-family:var(--font-mono);font-size:11px;">${openFace ? 'Open Top' : 'Closed Cavity'}</span>`;
+    g.appendChild(row2);
+
+    return g;
   }
 
   _stepDetailsGroup(part) {

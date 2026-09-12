@@ -24,7 +24,9 @@ function partToShapeDef(part) {
  * comments for why).
  */
 export async function booleanOp(op, partA, partB) {
-  const request = { op, shapeA: partToShapeDef(partA), shapeB: partToShapeDef(partB) };
+  const shapeA = partToShapeDef(partA);
+  const shapeB = partToShapeDef(partB);
+  const request = { op, shapeA, shapeB };
   const result = await window.cadlite.booleanOp(request);
 
   if (!result.ok) {
@@ -47,8 +49,15 @@ export async function booleanOp(op, partA, partB) {
   mesh.castShadow = true;
   mesh.receiveShadow = true;
 
-  // Store raw mesh arrays so save/load can rebuild without needing OCC again.
-  const params = { mesh: { positions, normals, index }, sourceOp: op };
+  // Store raw mesh arrays so save/load can rebuild without needing OCC again,
+  // AND store shapeA, shapeB, op so chained booleans/fillets/chamfers can reconstruct the solid.
+  const params = {
+    mesh: { positions, normals, index },
+    sourceOp: op,
+    op,
+    shapeA,
+    shapeB
+  };
   const part = new Part({ name: `${op}_result`, type: 'part', mesh, kind: 'boolean', color: BOOLEAN_COLOR, params });
   return part;
 }

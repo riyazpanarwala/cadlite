@@ -41,8 +41,9 @@ function buildMeshFromData(meshData, color) {
  * @param {string} filter - 'all' | 'vertical' | 'horizontal'
  */
 export async function chamferPart(part, distance = 5, filter = 'all') {
+  const baseDef = partToShapeDef(part);
   const request = {
-    shapeDef: partToShapeDef(part),
+    shapeDef: baseDef,
     distance,
     filter
   };
@@ -54,12 +55,19 @@ export async function chamferPart(part, distance = 5, filter = 'all') {
 
   const { mesh, meshData } = buildMeshFromData(result.meshData, part.color);
   const newPart = new Part({
-    name: 'Chamfer 1',
+    name: `${part.name}_Chamfer`,
     type: 'part',
     mesh,
     kind: 'chamfer',
     color: part.color,
-    params: { ...part.params, mesh: meshData, chamferDistance: distance, filter }
+    params: {
+      ...part.params,
+      mesh: meshData,
+      basePart: baseDef,
+      chamferDistance: distance,
+      distance,
+      filter
+    }
   });
 
   return newPart;
@@ -72,8 +80,9 @@ export async function chamferPart(part, distance = 5, filter = 'all') {
  * @param {string} filter - 'all' | 'vertical' | 'horizontal'
  */
 export async function filletPart(part, radius = 3, filter = 'all') {
+  const baseDef = partToShapeDef(part);
   const request = {
-    shapeDef: partToShapeDef(part),
+    shapeDef: baseDef,
     radius,
     filter
   };
@@ -85,12 +94,57 @@ export async function filletPart(part, radius = 3, filter = 'all') {
 
   const { mesh, meshData } = buildMeshFromData(result.meshData, part.color);
   const newPart = new Part({
-    name: 'Fillet 1',
+    name: `${part.name}_Fillet`,
     type: 'part',
     mesh,
     kind: 'fillet',
     color: part.color,
-    params: { ...part.params, mesh: meshData, filletRadius: radius, filter }
+    params: {
+      ...part.params,
+      mesh: meshData,
+      basePart: baseDef,
+      filletRadius: radius,
+      radius,
+      filter
+    }
+  });
+
+  return newPart;
+}
+
+/**
+ * Hollows out a solid Part using OpenCascade BRepOffsetAPI_MakeThickSolid.
+ * @param {Part} part - The solid part to shell
+ * @param {number} thickness - Wall thickness in mm
+ * @param {boolean} openFace - If true, removes top face (open container); if false, enclosed hollow cavity
+ */
+export async function shellPart(part, thickness = 2, openFace = true) {
+  const baseDef = partToShapeDef(part);
+  const request = {
+    shapeDef: baseDef,
+    thickness,
+    openFace
+  };
+
+  const result = await window.cadlite.shellOp(request);
+  if (!result.ok) {
+    throw new Error(result.error || 'Shell operation failed');
+  }
+
+  const { mesh, meshData } = buildMeshFromData(result.meshData, part.color);
+  const newPart = new Part({
+    name: `${part.name}_Shell`,
+    type: 'part',
+    mesh,
+    kind: 'shell',
+    color: part.color,
+    params: {
+      ...part.params,
+      mesh: meshData,
+      basePart: baseDef,
+      thickness,
+      openFace
+    }
   });
 
   return newPart;

@@ -47,7 +47,7 @@ function buildPartFromData(data) {
       geometry = buildExtrudeGeometry(data.params);
     } else if (data.kind === 'revolve') {
       geometry = buildRevolveGeometry(data.params);
-    } else if (data.kind === 'boolean' || data.kind === 'chamfer' || data.kind === 'fillet' || data.kind === 'step') {
+    } else if (data.kind === 'boolean' || data.kind === 'chamfer' || data.kind === 'fillet' || data.kind === 'step' || data.kind === 'shell') {
       geometry = buildBooleanGeometry(data.params);
     } else {
       geometry = geometryForPrimitive(data.kind, data.params);

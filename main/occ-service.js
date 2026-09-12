@@ -162,7 +162,59 @@ function applyFilletToShape(oc, shape, radius = 3, filter = 'all') {
   return fillet.IsDone() ? fillet.Shape() : shape;
 }
 
+function findTopFace(oc, shape) {
+  let bestFace = null;
+  let maxCoord = -Infinity;
+  const exp = new oc.TopExp_Explorer_2(shape, oc.TopAbs_ShapeEnum.TopAbs_FACE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+  while (exp.More()) {
+    const face = oc.TopoDS.Face_1(exp.Current());
+    try {
+      const gprops = new oc.GProp_GProps_1();
+      oc.BRepGProp.SurfaceProperties_1(face, gprops, false, false);
+      const center = gprops.CentreOfMass();
+      const coord = Math.max(center.Y(), center.Z());
+      if (coord > maxCoord) {
+        maxCoord = coord;
+        bestFace = face;
+      }
+    } catch (_) {}
+    exp.Next();
+  }
+  return bestFace;
+}
+
+function applyShellToShape(oc, shape, thickness = 2, openFace = true) {
+  const closingFaces = new oc.TopTools_ListOfShape_1();
+  if (openFace) {
+    const topFace = findTopFace(oc, shape);
+    if (topFace) {
+      closingFaces.Append_1(topFace);
+    }
+  }
+
+  const thickSolid = new oc.BRepOffsetAPI_MakeThickSolid();
+  const offsetVal = -Math.abs(thickness);
+  thickSolid.MakeThickSolidByJoin(
+    shape,
+    closingFaces,
+    offsetVal,
+    1.0e-3,
+    oc.BRepOffset_Mode.BRepOffset_Skin,
+    false,
+    false,
+    oc.GeomAbs_JoinType.GeomAbs_Arc,
+    false,
+    new oc.Message_ProgressRange_1()
+  );
+  thickSolid.Build(new oc.Message_ProgressRange_1());
+  if (!thickSolid.IsDone()) {
+    throw new Error(`Shell failed. Wall thickness (${thickness}mm) may exceed geometry limits.`);
+  }
+  return thickSolid.Shape();
+}
+
 function buildShape(oc, def) {
+  if (!def) throw new Error('Cannot build null shape definition');
   let shape;
   switch (def.kind) {
     case 'box': shape = makeBoxShape(oc, def.params); break;
@@ -173,12 +225,39 @@ function buildShape(oc, def) {
     case 'revolve': shape = makeRevolShape(oc, def.params); break;
     case 'chamfer': {
       const base = buildShape(oc, def.params.basePart);
-      shape = applyChamferToShape(oc, base, def.params.distance, def.params.filter);
+      shape = applyChamferToShape(oc, base, def.params.distance || def.params.chamferDistance || 5, def.params.filter);
       break;
     }
     case 'fillet': {
       const base = buildShape(oc, def.params.basePart);
-      shape = applyFilletToShape(oc, base, def.params.radius, def.params.filter);
+      shape = applyFilletToShape(oc, base, def.params.radius || def.params.filletRadius || 3, def.params.filter);
+      break;
+    }
+    case 'shell': {
+      const base = buildShape(oc, def.params.basePart);
+      shape = applyShellToShape(oc, base, def.params.thickness || 2, def.params.openFace !== false);
+      break;
+    }
+    case 'boolean': {
+      const a = buildShape(oc, def.params.shapeA);
+      const b = buildShape(oc, def.params.shapeB);
+      const progress = () => new oc.Message_ProgressRange_1();
+      const op = def.params.sourceOp || def.params.op;
+      if (op === 'union') {
+        const fuse = new oc.BRepAlgoAPI_Fuse_3(a, b, progress());
+        fuse.Build(progress());
+        shape = fuse.Shape();
+      } else if (op === 'cut') {
+        const cut = new oc.BRepAlgoAPI_Cut_3(a, b, progress());
+        cut.Build(progress());
+        shape = cut.Shape();
+      } else if (op === 'intersect') {
+        const common = new oc.BRepAlgoAPI_Common_3(a, b, progress());
+        common.Build(progress());
+        shape = common.Shape();
+      } else {
+        throw new Error(`Unknown boolean operation: ${op}`);
+      }
       break;
     }
     case 'step': {
@@ -463,10 +542,21 @@ async function importFromStep({ stepContent, fileName = 'ImportedPart.step' }) {
   };
 }
 
+/**
+ * Performs a Shell operation (hollows out a solid Part with uniform wall thickness).
+ */
+async function performShell({ shapeDef, thickness = 2, openFace = true }) {
+  const oc = await getOC();
+  const shape = buildShape(oc, shapeDef);
+  const shelledShape = applyShellToShape(oc, shape, thickness, openFace);
+  return shapeToMeshData(oc, shelledShape);
+}
+
 module.exports = {
   performBoolean,
   performChamfer,
   performFillet,
+  performShell,
   exportToStep,
   importFromStep
 };

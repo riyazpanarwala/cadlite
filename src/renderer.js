@@ -16,7 +16,7 @@ import { TreePanel } from './ui/tree-panel.js';
 import { PropertiesPanel } from './ui/properties-panel.js';
 import { serializeProject, deserializeProject } from './project/save-load.js';
 import { ViewCube } from './ui/viewcube.js';
-import { chamferPart, filletPart } from './geometry/modifiers.js';
+import { chamferPart, filletPart, shellPart } from './geometry/modifiers.js';
 import { DrawingSheetGenerator } from './drawing/drawing-sheet.js';
 
 // ---------------------------------------------------------------------
@@ -104,10 +104,14 @@ function updateGizmoAttachment() {
     return;
   }
   const part = selection.primary();
-  if (mateSolver.isDriven(part)) {
+  if (mateSolver.isRigidlyLocked(part)) {
     gizmo.detach();
-    setStatus(`"${part.name}" is held in place by a mate - drag its driver part instead`);
+    setStatus(`"${part.name}" is rigidly locked by a mate - drag its driver part instead`);
     return;
+  }
+  if (mateSolver.isArticulated(part)) {
+    const mate = mateSolver.getArticulatedMate(part);
+    setStatus(`"${part.name}" has an articulated ${mate.type} mate (free axial slide & spin enabled)`);
   }
   gizmo.attach(part);
 }
@@ -880,27 +884,22 @@ document.getElementById('btn-shell')?.addEventListener('click', async () => {
   const thickness = parseFloat(thickStr);
   if (!thickStr || isNaN(thickness) || thickness <= 0) return;
 
-  setStatus(`Applying Shell (${thickness}mm wall) to "${p.name}"...`);
-  try {
-    const core = clonePart(p, 'ShellCore');
-    const bbox = new THREE.Box3().setFromObject(p.object3D);
-    const size = new THREE.Vector3();
-    bbox.getSize(size);
-    const scaleX = Math.max(0.1, (size.x - 2 * thickness) / Math.max(1, size.x));
-    const scaleY = Math.max(0.1, (size.y - 2 * thickness) / Math.max(1, size.y));
-    const scaleZ = Math.max(0.1, (size.z - 2 * thickness) / Math.max(1, size.z));
-    core.object3D.scale.set(scaleX, scaleY, scaleZ);
-    core.object3D.updateMatrixWorld(true);
+  const modeChoice = window.confirm(
+    `Shell Mode for "${p.name}":\n\nClick [OK] for Open Container (remove top face)\nClick [Cancel] for Enclosed Hollow Cavity`
+  );
+  const openFace = modeChoice;
 
-    const shelled = await booleanOp('cut', p, core);
-    shelled.name = `${p.name}_Shell`;
+  gizmo.detach();
+  setStatus(`Applying B-Rep Shell (${thickness}mm wall, ${openFace ? 'open container' : 'hollow cavity'}) to "${p.name}"...`);
+  try {
+    const shelled = await shellPart(p, thickness, openFace);
     assembly.removePart(p);
     mateSolver.removeMatesFor(p);
     assembly.addPart(shelled);
     selection.select(shelled);
     treePanel.render();
     propertiesPanel.render();
-    setStatus(`Shell applied (${thickness}mm wall thickness)`);
+    setStatus(`Shell applied (${thickness}mm wall, ${openFace ? 'open top' : 'closed cavity'})`);
   } catch (err) {
     console.error('Shell failed:', err);
     setStatus(`Shell failed: ${err.message}`);

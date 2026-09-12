@@ -109,6 +109,17 @@ ipcMain.handle('geometry:fillet', async (_evt, request) => {
   }
 });
 
+ipcMain.handle('geometry:shell', async (_evt, request) => {
+  try {
+    const { performShell } = require('./main/occ-service.js');
+    const meshData = await performShell(request);
+    return { ok: true, meshData };
+  } catch (err) {
+    console.error('Shell op failed:', err);
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
 ipcMain.handle('step:export', async (_evt, parts) => {
   try {
     const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
