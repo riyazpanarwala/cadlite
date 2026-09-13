@@ -120,6 +120,17 @@ ipcMain.handle('geometry:shell', async (_evt, request) => {
   }
 });
 
+ipcMain.handle('geometry:getTopology', async (_evt, shapeDef) => {
+  try {
+    const { getShapeMeshAndTopology } = require('./main/occ-service.js');
+    const result = await getShapeMeshAndTopology(shapeDef);
+    return { ok: true, ...result };
+  } catch (err) {
+    console.error('Topology extraction failed:', err);
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
 ipcMain.handle('step:export', async (_evt, parts) => {
   try {
     const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {

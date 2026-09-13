@@ -51,13 +51,20 @@ export async function booleanOp(op, partA, partB) {
 
   // Store raw mesh arrays so save/load can rebuild without needing OCC again,
   // AND store shapeA, shapeB, op so chained booleans/fillets/chamfers can reconstruct the solid.
+  const topology = {
+    faces: result.meshData.faces || [],
+    edges: result.meshData.edges || [],
+    faceRanges: result.meshData.faceRanges || []
+  };
+
   const params = {
     mesh: { positions, normals, index },
     sourceOp: op,
     op,
     shapeA,
-    shapeB
+    shapeB,
+    topology
   };
-  const part = new Part({ name: `${op}_result`, type: 'part', mesh, kind: 'boolean', color: BOOLEAN_COLOR, params });
+  const part = new Part({ name: `${op}_result`, type: 'part', mesh, kind: 'boolean', color: BOOLEAN_COLOR, params, topology });
   return part;
 }

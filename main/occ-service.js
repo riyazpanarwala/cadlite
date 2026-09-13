@@ -16,6 +16,8 @@
  * chamfers, and thin/thick solid shells.
  */
 
+const { analyzeTopology, resolveEdgesByTopoIds } = require('./topology-naming.js');
+
 let ocPromise = null;
 
 async function getOC() {
@@ -283,17 +285,22 @@ function buildShape(oc, def) {
   return shape;
 }
 
-/** Walks all faces of a shape and flattens their triangulation into a single indexed mesh. */
+/** Walks all faces of a shape, flattens their triangulation into indexed mesh data, and embeds topological entity maps. */
 function shapeToMeshData(oc, shape, deflection = 0.5) {
   new oc.BRepMesh_IncrementalMesh_2(shape, deflection, false, 0.5, false);
 
   const positions = [];
   const normals = [];
   const indices = [];
+  const faceRanges = [];
 
-  const explorer = new oc.TopExp_Explorer_2(shape, oc.TopAbs_ShapeEnum.TopAbs_FACE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
-  for (; explorer.More(); explorer.Next()) {
-    const face = oc.TopoDS.Face_1(explorer.Current());
+  const topology = analyzeTopology(oc, shape);
+  const faceMap = new oc.TopTools_IndexedMapOfShape_1();
+  oc.TopExp.MapShapes_1(shape, oc.TopAbs_ShapeEnum.TopAbs_FACE, faceMap);
+  const numFaces = faceMap.Extent();
+
+  for (let i = 1; i <= numFaces; i++) {
+    const face = oc.TopoDS.Face_1(faceMap.FindKey(i));
     const location = new oc.TopLoc_Location_1();
     const triHandle = oc.BRep_Tool.Triangulation(face, location, 0);
     if (triHandle.IsNull()) continue;
@@ -304,11 +311,13 @@ function shapeToMeshData(oc, shape, deflection = 0.5) {
 
     const nbNodes = tri.NbNodes();
     const baseIndex = positions.length / 3;
+    const startIndex = indices.length;
+    const startTriangle = startIndex / 3;
 
-    for (let i = 1; i <= nbNodes; i++) {
-      const p = tri.Node(i).Transformed(trsf);
+    for (let n = 1; n <= nbNodes; n++) {
+      const p = tri.Node(n).Transformed(trsf);
       positions.push(p.X(), p.Y(), p.Z());
-      normals.push(0, 0, 0); // filled in per-triangle below (flat shading via accumulation)
+      normals.push(0, 0, 0); // computed below
     }
 
     const nbTriangles = tri.NbTriangles();
@@ -320,9 +329,36 @@ function shapeToMeshData(oc, shape, deflection = 0.5) {
       if (reversed) { const tmp = n2; n2 = n3; n3 = tmp; }
       indices.push(baseIndex + n1 - 1, baseIndex + n2 - 1, baseIndex + n3 - 1);
     }
+
+    const topoFace = (topology && topology.faces && topology.faces[i - 1]) || {
+      topoId: `Face_${i}`,
+      surfaceType: 'plane',
+      normal: [0, 0, 1],
+      centroid: [0, 0, 0],
+      area: 0
+    };
+
+    faceRanges.push({
+      faceId: topoFace.topoId,
+      surfaceType: topoFace.surfaceType,
+      normal: topoFace.normal,
+      centroid: topoFace.centroid,
+      area: topoFace.area,
+      startTriangle,
+      triangleCount: nbTriangles,
+      startIndex,
+      indexCount: nbTriangles * 3
+    });
   }
 
-  return { positions, normals, index: indices };
+  return {
+    positions,
+    normals,
+    index: indices,
+    faceRanges,
+    edges: (topology && topology.edges) || [],
+    faces: (topology && topology.faces) || []
+  };
 }
 
 /**
@@ -382,25 +418,39 @@ function edgeMatchesFilter(oc, edge, filter) {
 
 /**
  * Performs a Chamfer (bevel) on the edges of a shape.
+ * Supports targeted edge selection via targetEdgeIds or legacy filter.
  */
-async function performChamfer({ shapeDef, distance = 5, filter = 'all' }) {
+async function performChamfer({ shapeDef, distance = 5, filter = 'all', targetEdgeIds = [] }) {
   const oc = await getOC();
   const shape = buildShape(oc, shapeDef);
   const chamfer = new oc.BRepFilletAPI_MakeChamfer(shape);
-  const exp = new oc.TopExp_Explorer_2(shape, oc.TopAbs_ShapeEnum.TopAbs_EDGE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
-  let count = 0;
-  while (exp.More()) {
-    const edge = oc.TopoDS.Edge_1(exp.Current());
-    if (edgeMatchesFilter(oc, edge, filter)) {
-      try {
-        chamfer.Add_2(distance, edge);
-        count++;
-      } catch (err) {
-        // Skip edges where chamfer cannot be bound
-      }
-    }
-    exp.Next();
+
+  let edgesToChamfer = [];
+  if (Array.isArray(targetEdgeIds) && targetEdgeIds.length > 0) {
+    edgesToChamfer = resolveEdgesByTopoIds(oc, shape, targetEdgeIds);
   }
+
+  if (edgesToChamfer.length === 0) {
+    const exp = new oc.TopExp_Explorer_2(shape, oc.TopAbs_ShapeEnum.TopAbs_EDGE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+    while (exp.More()) {
+      const edge = oc.TopoDS.Edge_1(exp.Current());
+      if (edgeMatchesFilter(oc, edge, filter)) {
+        edgesToChamfer.push(edge);
+      }
+      exp.Next();
+    }
+  }
+
+  let count = 0;
+  for (const edge of edgesToChamfer) {
+    try {
+      chamfer.Add_2(distance, edge);
+      count++;
+    } catch (err) {
+      // Skip edges where chamfer cannot be bound
+    }
+  }
+
   if (count === 0) {
     throw new Error('No matching edges found for chamfer');
   }
@@ -413,25 +463,39 @@ async function performChamfer({ shapeDef, distance = 5, filter = 'all' }) {
 
 /**
  * Performs a Fillet (rounding) on the edges of a shape.
+ * Supports targeted edge selection via targetEdgeIds or legacy filter.
  */
-async function performFillet({ shapeDef, radius = 3, filter = 'all' }) {
+async function performFillet({ shapeDef, radius = 3, filter = 'all', targetEdgeIds = [] }) {
   const oc = await getOC();
   const shape = buildShape(oc, shapeDef);
   const fillet = new oc.BRepFilletAPI_MakeFillet(shape, oc.ChFi3d_FilletShape.ChFi3d_Rational);
-  const exp = new oc.TopExp_Explorer_2(shape, oc.TopAbs_ShapeEnum.TopAbs_EDGE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
-  let count = 0;
-  while (exp.More()) {
-    const edge = oc.TopoDS.Edge_1(exp.Current());
-    if (edgeMatchesFilter(oc, edge, filter)) {
-      try {
-        fillet.Add_2(radius, edge);
-        count++;
-      } catch (err) {
-        // Skip edges
-      }
-    }
-    exp.Next();
+
+  let edgesToFillet = [];
+  if (Array.isArray(targetEdgeIds) && targetEdgeIds.length > 0) {
+    edgesToFillet = resolveEdgesByTopoIds(oc, shape, targetEdgeIds);
   }
+
+  if (edgesToFillet.length === 0) {
+    const exp = new oc.TopExp_Explorer_2(shape, oc.TopAbs_ShapeEnum.TopAbs_EDGE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+    while (exp.More()) {
+      const edge = oc.TopoDS.Edge_1(exp.Current());
+      if (edgeMatchesFilter(oc, edge, filter)) {
+        edgesToFillet.push(edge);
+      }
+      exp.Next();
+    }
+  }
+
+  let count = 0;
+  for (const edge of edgesToFillet) {
+    try {
+      fillet.Add_2(radius, edge);
+      count++;
+    } catch (err) {
+      // Skip edges
+    }
+  }
+
   if (count === 0) {
     throw new Error('No matching edges found for fillet');
   }
@@ -544,11 +608,22 @@ async function performShell({ shapeDef, thickness = 2, openFace = true }) {
   return shapeToMeshData(oc, shelledShape);
 }
 
+/**
+ * Builds OpenCascade solid shape and extracts full mesh geometry + topological graph.
+ */
+async function getShapeMeshAndTopology(shapeDef) {
+  const oc = await getOC();
+  const shape = buildShape(oc, shapeDef);
+  const meshData = shapeToMeshData(oc, shape);
+  return { meshData, topology: { faces: meshData.faces, edges: meshData.edges } };
+}
+
 module.exports = {
   performBoolean,
   performChamfer,
   performFillet,
   performShell,
   exportToStep,
-  importFromStep
+  importFromStep,
+  getShapeMeshAndTopology
 };

@@ -41,12 +41,56 @@ viewport.onRender(() => viewcube.update());
 let mode = 'assembly'; // 'assembly' | 'sketch'
 let activeSketch = null;
 
+const topoBreadcrumbEl = document.getElementById('topology-breadcrumb');
+const topoBreadcrumbText = document.getElementById('topo-breadcrumb-text');
+
+function updateTopologyBreadcrumb() {
+  if (!topoBreadcrumbEl || !topoBreadcrumbText) return;
+  if (selection.filterMode === 'face') {
+    const f = selection.primaryFace();
+    if (f) {
+      topoBreadcrumbText.textContent = `${f.part.name} / ${f.topoId}`;
+      topoBreadcrumbEl.classList.remove('hidden');
+      return;
+    }
+  } else if (selection.filterMode === 'edge') {
+    const e = selection.primaryEdge();
+    if (e) {
+      topoBreadcrumbText.textContent = `${e.part.name} / ${e.topoId}`;
+      topoBreadcrumbEl.classList.remove('hidden');
+      return;
+    }
+  }
+  topoBreadcrumbEl.classList.add('hidden');
+}
+
 const selection = new SelectionManager(() => {
   treePanel.render();
   propertiesPanel.render();
   updateGizmoAttachment();
+  updateTopologyBreadcrumb();
 });
+selection.attachScene(viewport.scene);
 treePanel.selection = selection;
+
+// Selection filter mode buttons (Part / Face / Edge)
+document.querySelectorAll('[data-filter-mode]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const fMode = btn.dataset.filterMode;
+    document.querySelectorAll('[data-filter-mode]').forEach((b) => b.classList.toggle('active', b === btn));
+    selection.setFilterMode(fMode);
+    if (fMode === 'face') {
+      setStatus('Face Filter active: Click any solid face to inspect its topological ID, surface normal, and area');
+      viewportHint.textContent = 'Face Mode: Click a face to inspect; Shift+Click to multi-select';
+    } else if (fMode === 'edge') {
+      setStatus('Edge Filter active: Click any edge to select it for targeted Fillet or Chamfer');
+      viewportHint.textContent = 'Edge Mode: Click an edge to select for targeted Fillet / Chamfer';
+    } else {
+      setStatus('Part Filter active: Click any part to select, drag, or apply mates');
+      viewportHint.textContent = 'Click a part to select and drag it, or press S to sketch';
+    }
+  });
+});
 
 let currentDocName = 'Part2';
 function updateDocName(name) {
@@ -340,6 +384,41 @@ document.querySelectorAll('[data-transform-mode]').forEach((btn) => {
 // Viewport interaction: selection (assembly mode) / sketching (sketch mode)
 // ---------------------------------------------------------------------
 
+// Hover highlighting in Face and Edge filter modes
+canvas.addEventListener('pointermove', (event) => {
+  if (mode !== 'assembly') return;
+
+  const raycaster = viewport.raycasterFromEvent(event);
+
+  if (selection.filterMode === 'face') {
+    const intersects = raycaster.intersectObjects(assembly.root.object3D.children, true);
+    const hit = intersects.find((h) => h.object.isMesh && h.faceIndex !== undefined && !h.object.userData.isOverlay);
+    if (hit) {
+      const part = assembly.findByObject3D(hit.object);
+      if (part) {
+        const faceRange = part.getFaceByTriangleIndex(hit.faceIndex);
+        if (faceRange) {
+          selection.hoverFace(part, faceRange);
+          return;
+        }
+      }
+    }
+    selection.hoverFace(null, null);
+  } else if (selection.filterMode === 'edge') {
+    raycaster.params.Line = { threshold: 4 };
+    const intersects = raycaster.intersectObjects(assembly.root.object3D.children, true);
+    const hit = intersects.find((h) => h.object.userData && h.object.userData.isCadEdge);
+    if (hit) {
+      const part = assembly.findByObject3D(hit.object.parent);
+      if (part && hit.object.userData.edgeData) {
+        selection.hoverEdge(part, hit.object.userData.edgeData);
+        return;
+      }
+    }
+    selection.hoverEdge(null, null);
+  }
+});
+
 canvas.addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return; // left click only; right/middle reserved for orbit controls
 
@@ -379,14 +458,54 @@ canvas.addEventListener('pointerdown', (event) => {
     return;
   }
 
-  // Assembly mode: raycast against real geometry for selection
+  // Assembly mode:
   const raycaster = viewport.raycasterFromEvent(event);
+
+  if (selection.filterMode === 'face') {
+    const intersects = raycaster.intersectObjects(assembly.root.object3D.children, true);
+    const hit = intersects.find((h) => h.object.isMesh && h.faceIndex !== undefined && !h.object.userData.isOverlay);
+    if (!hit) {
+      if (!event.shiftKey) selection.clearSubSelections();
+      return;
+    }
+    const part = assembly.findByObject3D(hit.object);
+    if (part) {
+      const faceRange = part.getFaceByTriangleIndex(hit.faceIndex);
+      if (faceRange) {
+        selection.selectFace(part, faceRange, event.shiftKey);
+        const areaStr = faceRange.area ? ` (area: ${faceRange.area.toFixed(1)} mm²)` : '';
+        setStatus(`Selected Face: ${faceRange.faceId} [${faceRange.surfaceType || 'plane'}]${areaStr}`);
+      }
+    }
+    return;
+  }
+
+  if (selection.filterMode === 'edge') {
+    raycaster.params.Line = { threshold: 4 };
+    const intersects = raycaster.intersectObjects(assembly.root.object3D.children, true);
+    const hit = intersects.find((h) => h.object.userData && h.object.userData.isCadEdge);
+    if (!hit) {
+      if (!event.shiftKey) selection.clearSubSelections();
+      return;
+    }
+    const part = assembly.findByObject3D(hit.object.parent);
+    if (part && hit.object.userData.edgeData) {
+      selection.selectEdge(part, hit.object.userData.edgeData, event.shiftKey);
+      const edge = hit.object.userData.edgeData;
+      const lenStr = edge.length ? ` (length: ${edge.length.toFixed(1)} mm)` : '';
+      setStatus(`Selected Edge: ${edge.topoId} [${edge.curveType || 'line'}]${lenStr}`);
+    }
+    return;
+  }
+
+  // Part mode:
   const intersects = raycaster.intersectObjects(assembly.root.object3D.children, true);
-  if (intersects.length === 0) {
+  const meshHit = intersects.find((h) => h.object.isMesh && !h.object.userData.isOverlay);
+  if (!meshHit) {
     if (!event.shiftKey) selection.clear();
     return;
   }
-  const part = assembly.findByObject3D(intersects[0].object);
+  const part = assembly.findByObject3D(meshHit.object);
   if (part) selection.select(part, event.shiftKey);
 });
 
@@ -604,9 +723,41 @@ async function runBoolean(op) {
 // ---------------------------------------------------------------------
 
 document.getElementById('btn-chamfer')?.addEventListener('click', async () => {
+  const selectedEdges = selection.selectedEdges || [];
+  if (selectedEdges.length > 0) {
+    const targetPart = selectedEdges[0].part;
+    const targetEdgeIds = selectedEdges.filter((e) => e.part === targetPart).map((e) => e.topoId);
+
+    const distStr = window.prompt(
+      `Targeted Chamfer Feature:\n\nEnter chamfer distance (mm) for ${targetEdgeIds.length} selected edge(s):\n${targetEdgeIds.slice(0, 3).join('\n')}${targetEdgeIds.length > 3 ? '\n...' : ''}`,
+      '5'
+    );
+    const dist = parseFloat(distStr);
+    if (!distStr || isNaN(dist) || dist <= 0) return;
+
+    gizmo.detach();
+    setStatus(`Applying Targeted Chamfer on ${targetEdgeIds.length} edge(s)...`);
+
+    try {
+      const chamferedPart = await chamferPart(targetPart, dist, 'all', targetEdgeIds);
+      assembly.removePart(targetPart);
+      mateSolver.removeMatesFor(targetPart);
+      assembly.addPart(chamferedPart);
+      selection.select(chamferedPart);
+      treePanel.render();
+      propertiesPanel.render();
+      setStatus(`Targeted Chamfer applied (${dist}mm on ${targetEdgeIds.length} edge(s))`);
+    } catch (err) {
+      console.error('Chamfer error:', err);
+      setStatus(`Chamfer failed: ${err.message}`);
+      window.alert(`Chamfer failed:\n\n${err.message}`);
+    }
+    return;
+  }
+
   const p = selection.primary();
   if (!p || p.type !== 'part') {
-    setStatus('Select a solid part to apply Chamfer');
+    setStatus('Select a solid part (or switch to Edge filter and select edges) to apply Chamfer');
     return;
   }
   const distStr = window.prompt(`Chamfer Feature:\nEnter chamfer distance (mm):`, '5');
@@ -638,9 +789,41 @@ document.getElementById('btn-chamfer')?.addEventListener('click', async () => {
 });
 
 document.getElementById('btn-fillet')?.addEventListener('click', async () => {
+  const selectedEdges = selection.selectedEdges || [];
+  if (selectedEdges.length > 0) {
+    const targetPart = selectedEdges[0].part;
+    const targetEdgeIds = selectedEdges.filter((e) => e.part === targetPart).map((e) => e.topoId);
+
+    const radStr = window.prompt(
+      `Targeted Fillet Feature:\n\nEnter fillet radius (mm) for ${targetEdgeIds.length} selected edge(s):\n${targetEdgeIds.slice(0, 3).join('\n')}${targetEdgeIds.length > 3 ? '\n...' : ''}`,
+      '3'
+    );
+    const rad = parseFloat(radStr);
+    if (!radStr || isNaN(rad) || rad <= 0) return;
+
+    gizmo.detach();
+    setStatus(`Applying Targeted Fillet on ${targetEdgeIds.length} edge(s)...`);
+
+    try {
+      const filletedPart = await filletPart(targetPart, rad, 'all', targetEdgeIds);
+      assembly.removePart(targetPart);
+      mateSolver.removeMatesFor(targetPart);
+      assembly.addPart(filletedPart);
+      selection.select(filletedPart);
+      treePanel.render();
+      propertiesPanel.render();
+      setStatus(`Targeted Fillet applied (R${rad}mm on ${targetEdgeIds.length} edge(s))`);
+    } catch (err) {
+      console.error('Fillet error:', err);
+      setStatus(`Fillet failed: ${err.message}`);
+      window.alert(`Fillet failed:\n\n${err.message}`);
+    }
+    return;
+  }
+
   const p = selection.primary();
   if (!p || p.type !== 'part') {
-    setStatus('Select a solid part to apply Fillet');
+    setStatus('Select a solid part (or switch to Edge filter and select edges) to apply Fillet');
     return;
   }
   const radStr = window.prompt(`Fillet Feature:\nEnter fillet radius (mm):`, '3');

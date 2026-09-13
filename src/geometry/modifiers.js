@@ -39,13 +39,15 @@ function buildMeshFromData(meshData, color) {
  * @param {Part} part - The solid part to chamfer
  * @param {number} distance - Chamfer distance in mm
  * @param {string} filter - 'all' | 'vertical' | 'horizontal'
+ * @param {string[]} targetEdgeIds - Specific topological edge IDs to chamfer
  */
-export async function chamferPart(part, distance = 5, filter = 'all') {
+export async function chamferPart(part, distance = 5, filter = 'all', targetEdgeIds = []) {
   const baseDef = partToShapeDef(part);
   const request = {
     shapeDef: baseDef,
     distance,
-    filter
+    filter,
+    targetEdgeIds
   };
 
   const result = await window.cadlite.chamferOp(request);
@@ -54,19 +56,28 @@ export async function chamferPart(part, distance = 5, filter = 'all') {
   }
 
   const { mesh, meshData } = buildMeshFromData(result.meshData, part.color);
+  const topology = {
+    faces: result.meshData.faces || [],
+    edges: result.meshData.edges || [],
+    faceRanges: result.meshData.faceRanges || []
+  };
+
   const newPart = new Part({
     name: `${part.name}_Chamfer`,
     type: 'part',
     mesh,
     kind: 'chamfer',
     color: part.color,
+    topology,
     params: {
       ...part.params,
       mesh: meshData,
       basePart: baseDef,
       chamferDistance: distance,
       distance,
-      filter
+      filter,
+      targetEdgeIds,
+      topology
     }
   });
 
@@ -78,13 +89,15 @@ export async function chamferPart(part, distance = 5, filter = 'all') {
  * @param {Part} part - The solid part to fillet
  * @param {number} radius - Fillet radius in mm
  * @param {string} filter - 'all' | 'vertical' | 'horizontal'
+ * @param {string[]} targetEdgeIds - Specific topological edge IDs to fillet
  */
-export async function filletPart(part, radius = 3, filter = 'all') {
+export async function filletPart(part, radius = 3, filter = 'all', targetEdgeIds = []) {
   const baseDef = partToShapeDef(part);
   const request = {
     shapeDef: baseDef,
     radius,
-    filter
+    filter,
+    targetEdgeIds
   };
 
   const result = await window.cadlite.filletOp(request);
@@ -93,19 +106,28 @@ export async function filletPart(part, radius = 3, filter = 'all') {
   }
 
   const { mesh, meshData } = buildMeshFromData(result.meshData, part.color);
+  const topology = {
+    faces: result.meshData.faces || [],
+    edges: result.meshData.edges || [],
+    faceRanges: result.meshData.faceRanges || []
+  };
+
   const newPart = new Part({
     name: `${part.name}_Fillet`,
     type: 'part',
     mesh,
     kind: 'fillet',
     color: part.color,
+    topology,
     params: {
       ...part.params,
       mesh: meshData,
       basePart: baseDef,
       filletRadius: radius,
       radius,
-      filter
+      filter,
+      targetEdgeIds,
+      topology
     }
   });
 

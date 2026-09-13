@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Part } from '../assembly/Part.js';
-import { geometryForPrimitive } from '../geometry/primitives.js';
-import { buildExtrudeGeometry } from '../geometry/extrude.js';
+import { geometryForPrimitive, buildPrimitiveTopology } from '../geometry/primitives.js';
+import { buildExtrudeGeometry, buildExtrudeTopology } from '../geometry/extrude.js';
 import { buildRevolveGeometry } from '../geometry/revolve.js';
 
 const FORMAT_VERSION = 1;
@@ -55,7 +55,17 @@ function buildPartFromData(data) {
     const mesh = new THREE.Mesh(geometry, makeMaterial(data.color));
     mesh.castShadow = true;
     mesh.receiveShadow = true;
-    part = new Part({ name: data.name, type: 'part', mesh, kind: data.kind, color: data.color, params: data.params });
+
+    let topo = data.topology || data.params?.topology || null;
+    if (!topo) {
+      if (data.kind === 'box' || data.kind === 'cylinder') {
+        topo = buildPrimitiveTopology(data.kind, data.params);
+      } else if (data.kind === 'extrude') {
+        topo = buildExtrudeTopology(data.params);
+      }
+    }
+
+    part = new Part({ name: data.name, type: 'part', mesh, kind: data.kind, color: data.color, params: data.params, topology: topo });
   }
 
   part.id = data.id; // preserve original ids so mate records / references stay valid

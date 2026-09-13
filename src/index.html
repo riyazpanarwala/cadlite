@@ -485,6 +485,18 @@
             <span class="doc-tab-close" id="doc-tab-close" title="Close Part">×</span>
           </div>
           <button class="doc-tab-add" id="doc-tab-add" title="New Part">+</button>
+          
+          <div class="selection-filter-bar">
+            <span class="selection-filter-label">Filter:</span>
+            <button class="filter-mode-btn active" data-filter-mode="part" title="Part Selection Mode (Move / Rotate / Mates)">◫ Part</button>
+            <button class="filter-mode-btn" data-filter-mode="face" title="Face Selection Mode (B-Rep Face Inspection / TNS)">▱ Face</button>
+            <button class="filter-mode-btn" data-filter-mode="edge" title="Edge Selection Mode (Targeted Fillet / Chamfer)">╱ Edge</button>
+          </div>
+        </div>
+
+        <div id="topology-breadcrumb" class="topology-breadcrumb hidden">
+          <span class="topo-icon">📍</span>
+          <span id="topo-breadcrumb-text" class="topo-text"></span>
         </div>
 
         <canvas id="viewport-canvas"></canvas>

@@ -28,8 +28,27 @@ export class PropertiesPanel {
   }
 
   render() {
-    const part = this.selection.primary();
     this.rootEl.innerHTML = '';
+
+    // If in Face filter mode and a face is selected, show Face Topology Inspector
+    if (this.selection.filterMode === 'face') {
+      const faceSel = this.selection.primaryFace();
+      if (faceSel) {
+        this.rootEl.appendChild(this._faceInspectorGroup(faceSel));
+        return;
+      }
+    }
+
+    // If in Edge filter mode and an edge is selected, show Edge Topology Inspector
+    if (this.selection.filterMode === 'edge') {
+      const edgeSel = this.selection.primaryEdge();
+      if (edgeSel) {
+        this.rootEl.appendChild(this._edgeInspectorGroup(edgeSel));
+        return;
+      }
+    }
+
+    const part = this.selection.primary();
 
     if (!part) {
       this.rootEl.innerHTML = '<div class="empty-state">Nothing selected</div>';
@@ -38,6 +57,10 @@ export class PropertiesPanel {
 
     this.rootEl.appendChild(this._identityGroup(part));
     this.rootEl.appendChild(this._transformGroup(part));
+
+    if (part.topology) {
+      this.rootEl.appendChild(this._topologySummaryGroup(part));
+    }
 
     const dims = DIM_FIELDS[part.kind];
     if (dims && dims.length) {
@@ -55,6 +78,97 @@ export class PropertiesPanel {
     } else if (part.kind === 'shell') {
       this.rootEl.appendChild(this._shellDetailsGroup(part));
     }
+  }
+
+  _faceInspectorGroup(sel) {
+    const { part, faceRange, topoId } = sel;
+    const g = this._group('Face Topology (TNS)');
+
+    const rowId = document.createElement('div');
+    rowId.className = 'prop-row';
+    rowId.innerHTML = `<label>TNS ID</label><span style="font-family:var(--font-mono);font-size:11px;color:#38bdf8;font-weight:bold;">${topoId}</span>`;
+    g.appendChild(rowId);
+
+    const rowPart = document.createElement('div');
+    rowPart.className = 'prop-row';
+    rowPart.innerHTML = `<label>Host Part</label><span style="font-size:11px;">${part.name}</span>`;
+    g.appendChild(rowPart);
+
+    const rowType = document.createElement('div');
+    rowType.className = 'prop-row';
+    rowType.innerHTML = `<label>Type</label><span style="text-transform:capitalize;font-size:11px;color:#a3e635;">${faceRange.surfaceType || 'plane'}</span>`;
+    g.appendChild(rowType);
+
+    if (faceRange.area) {
+      const rowArea = document.createElement('div');
+      rowArea.className = 'prop-row';
+      rowArea.innerHTML = `<label>Area</label><span style="font-family:var(--font-mono);font-size:11px;">${faceRange.area.toFixed(1)} mm²</span>`;
+      g.appendChild(rowArea);
+    }
+
+    if (faceRange.normal) {
+      const [nx, ny, nz] = faceRange.normal;
+      const rowNorm = document.createElement('div');
+      rowNorm.className = 'prop-row';
+      rowNorm.innerHTML = `<label>Normal</label><span style="font-family:var(--font-mono);font-size:10px;color:#94a3b8;">[${nx.toFixed(2)}, ${ny.toFixed(2)}, ${nz.toFixed(2)}]</span>`;
+      g.appendChild(rowNorm);
+    }
+
+    return g;
+  }
+
+  _edgeInspectorGroup(sel) {
+    const { part, edgeData, topoId } = sel;
+    const g = this._group('Edge Topology (TNS)');
+
+    const rowId = document.createElement('div');
+    rowId.className = 'prop-row';
+    rowId.innerHTML = `<label>TNS ID</label><span style="font-family:var(--font-mono);font-size:11px;color:#facc15;font-weight:bold;">${topoId}</span>`;
+    g.appendChild(rowId);
+
+    const rowPart = document.createElement('div');
+    rowPart.className = 'prop-row';
+    rowPart.innerHTML = `<label>Host Part</label><span style="font-size:11px;">${part.name}</span>`;
+    g.appendChild(rowPart);
+
+    const rowType = document.createElement('div');
+    rowType.className = 'prop-row';
+    rowType.innerHTML = `<label>Curve</label><span style="text-transform:capitalize;font-size:11px;color:#a3e635;">${edgeData.curveType || 'line'}</span>`;
+    g.appendChild(rowType);
+
+    if (edgeData.length) {
+      const rowLen = document.createElement('div');
+      rowLen.className = 'prop-row';
+      rowLen.innerHTML = `<label>Length</label><span style="font-family:var(--font-mono);font-size:11px;color:#38bdf8;">${edgeData.length.toFixed(1)} mm</span>`;
+      g.appendChild(rowLen);
+    }
+
+    if (edgeData.adjacentFaceIds && edgeData.adjacentFaceIds.length > 0) {
+      const rowAdj = document.createElement('div');
+      rowAdj.className = 'prop-row';
+      rowAdj.innerHTML = `<label>Faces</label><span style="font-family:var(--font-mono);font-size:10px;color:#94a3b8;">${edgeData.adjacentFaceIds.join(', ')}</span>`;
+      g.appendChild(rowAdj);
+    }
+
+    return g;
+  }
+
+  _topologySummaryGroup(part) {
+    const g = this._group('B-Rep Topology (TNS)');
+    const faceCount = (part.topology.faces && part.topology.faces.length) || (part.topology.faceRanges && part.topology.faceRanges.length) || 0;
+    const edgeCount = (part.topology.edges && part.topology.edges.length) || 0;
+
+    const row1 = document.createElement('div');
+    row1.className = 'prop-row';
+    row1.innerHTML = `<label>Faces</label><span style="font-family:var(--font-mono);font-size:11px;color:#38bdf8;">${faceCount} B-Rep Faces</span>`;
+    g.appendChild(row1);
+
+    const row2 = document.createElement('div');
+    row2.className = 'prop-row';
+    row2.innerHTML = `<label>Edges</label><span style="font-family:var(--font-mono);font-size:11px;color:#facc15;">${edgeCount} B-Rep Edges</span>`;
+    g.appendChild(row2);
+
+    return g;
   }
 
   _booleanDetailsGroup(part) {

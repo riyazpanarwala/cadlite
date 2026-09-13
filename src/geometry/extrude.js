@@ -40,8 +40,90 @@ export function extrudeSketch(sketchSession, options = 20) {
   mesh.matrix.decompose(mesh.position, mesh.quaternion, mesh.scale);
   mesh.matrixAutoUpdate = true;
 
-  const part = new Part({ name, type: 'part', mesh, kind: 'extrude', color, params });
+  const topology = buildExtrudeTopology(params);
+  params.topology = topology;
+
+  const part = new Part({ name, type: 'part', mesh, kind: 'extrude', color, params, topology });
   return part;
+}
+
+export function buildExtrudeTopology(params) {
+  const pts = params.points2D || [];
+  const depth = params.depth || 20;
+  const n = pts.length;
+  if (n < 3) return { faces: [], edges: [], faceRanges: [] };
+
+  const z0 = params.direction === 'symmetric' ? -depth / 2 : (params.direction === 'flip' ? -depth : 0);
+  const z1 = z0 + depth;
+
+  const faces = [
+    { topoId: 'Face_start_cap', surfaceType: 'plane', normal: [0, 0, -1], centroid: [0, 0, z0], area: 0, startTriangle: 0, triangleCount: n - 2 },
+    { topoId: 'Face_end_cap', surfaceType: 'plane', normal: [0, 0, 1], centroid: [0, 0, z1], area: 0, startTriangle: n - 2, triangleCount: n - 2 }
+  ];
+
+  const edges = [];
+
+  for (let i = 0; i < n; i++) {
+    const next = (i + 1) % n;
+    const p1 = pts[i];
+    const p2 = pts[next];
+
+    // Side face i
+    const midX = (p1[0] + p2[0]) / 2;
+    const midY = (p1[1] + p2[1]) / 2;
+    const dx = p2[0] - p1[0];
+    const dy = p2[1] - p1[1];
+    const len = Math.hypot(dx, dy);
+    const nx = dy / len;
+    const ny = -dx / len;
+
+    faces.push({
+      topoId: `Face_side_${i}`,
+      surfaceType: 'plane',
+      normal: [nx, ny, 0],
+      centroid: [midX, midY, (z0 + z1) / 2],
+      area: len * depth,
+      startTriangle: 2 * (n - 2) + i * 2,
+      triangleCount: 2
+    });
+
+    // Start cap edge
+    edges.push({
+      topoId: `Edge_Face_start_cap__Face_side_${i}`,
+      curveType: 'line',
+      length: len,
+      adjacentFaceIds: ['Face_start_cap', `Face_side_${i}`],
+      polyline: [[p1[0], p1[1], z0], [p2[0], p2[1], z0]]
+    });
+
+    // End cap edge
+    edges.push({
+      topoId: `Edge_Face_end_cap__Face_side_${i}`,
+      curveType: 'line',
+      length: len,
+      adjacentFaceIds: ['Face_end_cap', `Face_side_${i}`],
+      polyline: [[p1[0], p1[1], z1], [p2[0], p2[1], z1]]
+    });
+
+    // Lateral vertical edge
+    const prev = (i - 1 + n) % n;
+    edges.push({
+      topoId: `Edge_Face_side_${prev}__Face_side_${i}`,
+      curveType: 'line',
+      length: depth,
+      adjacentFaceIds: [`Face_side_${prev}`, `Face_side_${i}`],
+      polyline: [[p1[0], p1[1], z0], [p1[0], p1[1], z1]]
+    });
+  }
+
+  const faceRanges = faces.map((f) => ({
+    ...f,
+    faceId: f.topoId,
+    startIndex: f.startTriangle * 3,
+    indexCount: f.triangleCount * 3
+  }));
+
+  return { faces, edges, faceRanges };
 }
 
 /** Rebuilds extrude geometry from stored 2D points + depth + direction */
@@ -72,5 +154,7 @@ export function buildExtrudeGeometry(params) {
 export function rebuildExtrudeGeometry(part) {
   part.object3D.geometry.dispose();
   part.object3D.geometry = buildExtrudeGeometry(part.params);
+  const topology = buildExtrudeTopology(part.params);
+  part.setTopology(topology);
 }
 
