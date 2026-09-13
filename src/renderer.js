@@ -266,6 +266,7 @@ function setMode(newMode, planeType = null) {
     const chosenPlane = planeType || 'XZ';
     activeSketch = new SketchSession(viewport.scene, chosenPlane);
     setSketchTool('line');
+    updateSketchDOFBadge();
 
     // Smoothly align camera to view the chosen work plane perpendicularly
     if (chosenPlane === 'XY') viewcube.setView('FRONT');
@@ -280,6 +281,7 @@ function setMode(newMode, planeType = null) {
       activeSketch.dispose();
       activeSketch = null;
     }
+    document.getElementById('sketch-dof-badge')?.setAttribute('hidden', '');
     document.querySelectorAll('[data-sketch-tool]').forEach((b) => b.classList.remove('active'));
     viewportHint.textContent = 'Click a part to select and drag it, or press S to sketch';
     updateGizmoAttachment();
@@ -395,12 +397,50 @@ document.querySelectorAll('[data-transform-mode]').forEach((btn) => {
   });
 });
 
+let isDraggingSketchVertex = false;
+
+function updateSketchDOFBadge() {
+  const badge = document.getElementById('sketch-dof-badge');
+  if (!badge) return;
+  if (mode !== 'sketch' || !activeSketch || !activeSketch.closed) {
+    badge.hidden = true;
+    return;
+  }
+  const info = activeSketch.getDOFInfo();
+  badge.hidden = false;
+  badge.classList.remove('fully-constrained', 'over-constrained');
+
+  if (info.status === 'over_constrained') {
+    badge.classList.add('over-constrained');
+    const count = info.conflictingConstraints?.length || 1;
+    badge.innerHTML = `⚠️ Over-constrained (${count} Conflict${count > 1 ? 's' : ''})`;
+  } else if (info.status === 'fully_constrained' || info.dof === 0) {
+    badge.classList.add('fully-constrained');
+    badge.innerHTML = `✓ Fully Constrained (0 DOF)`;
+  } else {
+    badge.innerHTML = `○ Under-constrained (${info.dof} DOF)`;
+  }
+}
+
 // ---------------------------------------------------------------------
 // Viewport interaction: selection (assembly mode) / sketching (sketch mode)
 // ---------------------------------------------------------------------
 
-// Hover highlighting in Face and Edge filter modes
+// Hover highlighting in Face and Edge filter modes, and live sketch vertex dragging
 canvas.addEventListener('pointermove', (event) => {
+  if (mode === 'sketch') {
+    if (isDraggingSketchVertex && activeSketch) {
+      const raycaster = viewport.raycasterFromEvent(event);
+      const hitPoint = activeSketch.raycastToPlane(raycaster);
+      if (hitPoint) {
+        const { u, v } = activeSketch.sketchPlane.to2D(hitPoint);
+        activeSketch.dragTo(u, v);
+        updateSketchDOFBadge();
+      }
+    }
+    return;
+  }
+
   if (mode !== 'assembly') return;
 
   const raycaster = viewport.raycasterFromEvent(event);
@@ -434,6 +474,18 @@ canvas.addEventListener('pointermove', (event) => {
   }
 });
 
+window.addEventListener('pointerup', () => {
+  if (isDraggingSketchVertex) {
+    isDraggingSketchVertex = false;
+    viewport.controls.enabled = true;
+    if (activeSketch) {
+      activeSketch.stopDragging();
+      updateSketchDOFBadge();
+      setStatus('Committed sketch geometry update');
+    }
+  }
+});
+
 canvas.addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return; // left click only; right/middle reserved for orbit controls
 
@@ -445,7 +497,7 @@ canvas.addEventListener('pointerdown', (event) => {
   if (mode === 'sketch') {
     const raycaster = viewport.raycasterFromEvent(event);
 
-    // Check if user clicked on an interactive dimension badge!
+    // 1. Check if user clicked on an interactive dimension badge!
     const badgeHits = raycaster.intersectObjects(activeSketch.group.children, true);
     const badgeHit = badgeHits.find((h) => h.object.userData && h.object.userData.isDimensionBadge);
     if (badgeHit) {
@@ -458,17 +510,54 @@ canvas.addEventListener('pointerdown', (event) => {
         const newDist = parseFloat(newStr);
         if (!isNaN(newDist) && newDist > 0) {
           activeSketch.setDimension(c.pA, c.pB, newDist);
+          updateSketchDOFBadge();
           setStatus(`Updated dimension ${c.pA}-${c.pB} to ${newDist} mm`);
         }
       }
       return;
     }
 
+    // 2. Check if user clicked on an interactive constraint glyph!
+    const glyphHit = badgeHits.find((h) => h.object.userData && h.object.userData.isConstraintGlyph);
+    if (glyphHit) {
+      const c = glyphHit.object.userData.constraint;
+      const doDelete = window.confirm(
+        `Geometric Constraint: ${c.name || c.type}\n\nClick [OK] to delete this constraint, or [Cancel] to keep it.`
+      );
+      if (doDelete) {
+        activeSketch.solver.removeConstraint(c.id);
+        activeSketch.lastSolveResult = activeSketch.solver.solve();
+        activeSketch.syncPointsFromSolver();
+        activeSketch._redraw();
+        updateSketchDOFBadge();
+        setStatus(`Removed constraint ${c.name || c.id}`);
+      }
+      return;
+    }
+
+    // 3. If profile is already closed, check for solve-on-drag on vertices!
+    if (activeSketch.closed) {
+      const hitPoint = activeSketch.raycastToPlane(raycaster);
+      if (hitPoint) {
+        const local2D = activeSketch.sketchPlane.to2D(hitPoint);
+        const nearest = activeSketch.findNearestPoint(local2D.u, local2D.v, 10);
+        if (nearest) {
+          isDraggingSketchVertex = true;
+          viewport.controls.enabled = false;
+          activeSketch.startDragging(nearest.id);
+          setStatus(`Dragging vertex ${nearest.id} (Solving constraints live)`);
+          return;
+        }
+      }
+    }
+
+    // 4. Drawing points
     const point = activeSketch.raycastToPlane(raycaster);
     if (!point) return;
     const finished = activeSketch.addPoint(point);
     if (finished) {
-      viewportHint.textContent = 'Profile closed & constrained. Click dimension to edit or "Extrude" to make it solid.';
+      updateSketchDOFBadge();
+      viewportHint.textContent = 'Profile closed & constrained. Drag vertices to flex geometry, click dimension to edit, or "Extrude" to make solid.';
     }
     return;
   }
@@ -556,42 +645,49 @@ document.getElementById('btn-constraint-dimension')?.addEventListener('click', p
 document.getElementById('btn-constraint-horizontal')?.addEventListener('click', () => {
   if (activeSketch) {
     activeSketch.addGeometricConstraint('horizontal');
+    updateSketchDOFBadge();
     setStatus('Applied Horizontal constraint');
   }
 });
 document.getElementById('btn-constraint-vertical')?.addEventListener('click', () => {
   if (activeSketch) {
     activeSketch.addGeometricConstraint('vertical');
+    updateSketchDOFBadge();
     setStatus('Applied Vertical constraint');
   }
 });
 document.getElementById('btn-constraint-coincident')?.addEventListener('click', () => {
   if (activeSketch) {
     activeSketch.addGeometricConstraint('coincident');
+    updateSketchDOFBadge();
     setStatus('Applied Coincident constraint');
   }
 });
 document.getElementById('btn-constraint-perpendicular')?.addEventListener('click', () => {
   if (activeSketch) {
     activeSketch.addGeometricConstraint('perpendicular');
+    updateSketchDOFBadge();
     setStatus('Applied Perpendicular constraint');
   }
 });
 document.getElementById('btn-constraint-parallel')?.addEventListener('click', () => {
   if (activeSketch) {
     activeSketch.addGeometricConstraint('parallel');
+    updateSketchDOFBadge();
     setStatus('Applied Parallel constraint');
   }
 });
 document.getElementById('btn-constraint-equal')?.addEventListener('click', () => {
   if (activeSketch) {
     activeSketch.addGeometricConstraint('equal');
+    updateSketchDOFBadge();
     setStatus('Applied Equal Length constraint');
   }
 });
 document.getElementById('btn-constraint-fix')?.addEventListener('click', () => {
   if (activeSketch) {
     activeSketch.addGeometricConstraint('fix');
+    updateSketchDOFBadge();
     setStatus('Applied Fix anchor constraint');
   }
 });

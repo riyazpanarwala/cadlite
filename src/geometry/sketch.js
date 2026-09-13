@@ -122,13 +122,13 @@ function makeDimensionSprite(text) {
   return sprite;
 }
 
-function makeGlyphSprite(char) {
+function makeGlyphSprite(char, bgColor = '#0284c7') {
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
   const ctx = canvas.getContext('2d');
 
-  ctx.fillStyle = '#0284c7';
+  ctx.fillStyle = bgColor;
   ctx.beginPath();
   ctx.arc(32, 32, 28, 0, Math.PI * 2);
   ctx.fill();
@@ -137,7 +137,7 @@ function makeGlyphSprite(char) {
   ctx.stroke();
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 32px sans-serif';
+  ctx.font = 'bold 30px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(char, 32, 34);
@@ -172,6 +172,8 @@ export class SketchSession {
     this.points = []; // Committed 3D points on the plane
     this.closed = false;
     this.solver = new ConstraintSolver2D();
+    this.lastSolveResult = { dof: 0, status: 'under_constrained', conflictingConstraints: [] };
+    this.draggedPointId = null;
 
     this.group = new THREE.Group();
     this.group.name = 'sketch-session-visuals';
@@ -201,6 +203,8 @@ export class SketchSession {
     this.points = [];
     this.closed = false;
     this.solver.clear();
+    this.lastSolveResult = { dof: 0, status: 'under_constrained', conflictingConstraints: [] };
+    this.draggedPointId = null;
     this._redraw();
   }
 
@@ -239,7 +243,7 @@ export class SketchSession {
             }
           }
 
-          this.solver.solve();
+          this.lastSolveResult = this.solver.solve();
           this.syncPointsFromSolver();
           this.closed = true;
           this._redraw();
@@ -276,6 +280,7 @@ export class SketchSession {
         this.solver.addDistanceConstraint('p0', 'p1', width);
         this.solver.addDistanceConstraint('p0', 'p3', height);
 
+        this.lastSolveResult = this.solver.solve();
         this.syncPointsFromSolver();
         this.closed = true;
         this._redraw();
@@ -297,6 +302,7 @@ export class SketchSession {
         this.solver.addPoint('rim', center2D.u + radius, center2D.v);
         this.solver.addDistanceConstraint('center', 'rim', radius);
 
+        this.lastSolveResult = this.solver.solve();
         this._rebuildCirclePoints(center2D.u, center2D.v, radius);
         this.closed = true;
         this._redraw();
@@ -343,14 +349,15 @@ export class SketchSession {
     }
 
     this.solver.addDistanceConstraint(pAId, pBId, newDistance);
-    this.solver.solve();
+    this.lastSolveResult = this.solver.solve();
     this.syncPointsFromSolver();
     this._redraw();
+    return this.lastSolveResult;
   }
 
   /** Apply a geometric constraint to the active sketch */
   addGeometricConstraint(type, targetPoints = null) {
-    if (this.solver.points.length < 2) return;
+    if (this.solver.points.length < 2) return this.lastSolveResult;
     const pA = targetPoints ? targetPoints[0] : 'p0';
     const pB = targetPoints ? targetPoints[1] : 'p1';
 
@@ -359,17 +366,58 @@ export class SketchSession {
     else if (type === 'coincident' && targetPoints && targetPoints.length >= 2) {
       this.solver.addCoincidentConstraint(targetPoints[0], targetPoints[1]);
     } else if (type === 'fix') {
-      this.solver.setPointFixed(pA, true);
+      this.solver.addFixConstraint(pA);
     } else if (type === 'perpendicular' && this.solver.points.length >= 4) {
       this.solver.addPerpendicularConstraint('p0', 'p1', 'p1', 'p2');
     } else if (type === 'parallel' && this.solver.points.length >= 4) {
       this.solver.addParallelConstraint('p0', 'p1', 'p2', 'p3');
     } else if (type === 'equal' && this.solver.points.length >= 4) {
       this.solver.addEqualLengthConstraint('p0', 'p1', 'p2', 'p3');
+    } else if (type === 'midpoint' && targetPoints && targetPoints.length >= 3) {
+      this.solver.addMidpointConstraint(targetPoints[0], targetPoints[1], targetPoints[2]);
     }
 
-    this.solver.solve();
+    this.lastSolveResult = this.solver.solve();
     this.syncPointsFromSolver();
+    this._redraw();
+    return this.lastSolveResult;
+  }
+
+  getDOFInfo() {
+    return this.lastSolveResult || { dof: 0, status: 'under_constrained', conflictingConstraints: [] };
+  }
+
+  findNearestPoint(u, v, threshold = 8) {
+    let bestPt = null;
+    let bestDist = threshold;
+    for (const p of this.solver.points) {
+      const d = Math.hypot(p.u - u, p.v - v);
+      if (d < bestDist) {
+        bestDist = d;
+        bestPt = p;
+      }
+    }
+    return bestPt;
+  }
+
+  startDragging(pointId) {
+    this.draggedPointId = pointId;
+  }
+
+  dragTo(u, v) {
+    if (!this.draggedPointId) return;
+    this.solver.setDragGoal(this.draggedPointId, u, v, 0.2);
+    this.lastSolveResult = this.solver.solve(30, 1e-3);
+    this.syncPointsFromSolver();
+    this._redraw();
+  }
+
+  stopDragging() {
+    if (!this.draggedPointId) return;
+    this.solver.clearDragGoals();
+    this.lastSolveResult = this.solver.solve();
+    this.syncPointsFromSolver();
+    this.draggedPointId = null;
     this._redraw();
   }
 
@@ -404,6 +452,8 @@ export class SketchSession {
     this.points = [];
     this.closed = false;
     this.solver.clear();
+    this.lastSolveResult = { dof: 0, status: 'under_constrained', conflictingConstraints: [] };
+    this.draggedPointId = null;
     this._redraw();
   }
 
@@ -424,32 +474,111 @@ export class SketchSession {
     }
     if (this.points.length === 0) return;
 
-    const material = new THREE.LineBasicMaterial({ color: 0xffb454, linewidth: 2.5 });
+    // SolidWorks-style color coding based on constraint status
+    let strokeColor = 0x38bdf8; // SolidWorks under-constrained electric blue
+    if (this.lastSolveResult?.status === 'over_constrained') {
+      strokeColor = 0xef4444; // Warning Red (conflicting)
+    } else if (this.lastSolveResult?.status === 'fully_constrained') {
+      strokeColor = 0x1e293b; // Fully constrained Dark Slate / Black
+    } else if (!this.closed) {
+      strokeColor = 0xffb020; // In-progress drawing Amber
+    }
+
+    const material = new THREE.LineBasicMaterial({ color: strokeColor, linewidth: 2.8 });
     const pts = this.closed ? [...this.points, this.points[0]] : this.points;
     const geometry = new THREE.BufferGeometry().setFromPoints(pts);
     const line = new THREE.Line(geometry, material);
     this.group.add(line);
 
-    // Vertex dots
-    const dotGeo = new THREE.SphereGeometry(1.6, 8, 8);
-    const dotMat = new THREE.MeshBasicMaterial({ color: 0xffb454 });
-    for (const p of this.points) {
+    // Vertex dots (interactive clickable anchor spheres)
+    const dotColor = strokeColor === 0x1e293b ? 0x475569 : strokeColor;
+    const dotGeo = new THREE.SphereGeometry(2.0, 10, 10);
+    const dotMat = new THREE.MeshBasicMaterial({ color: dotColor });
+    for (let i = 0; i < this.points.length; i++) {
       const dot = new THREE.Mesh(dotGeo, dotMat);
-      dot.position.copy(p);
+      dot.position.copy(this.points[i]);
+      dot.userData = {
+        isSketchVertex: true,
+        pointId: 'p' + i,
+        point: this.points[i]
+      };
       this.group.add(dot);
     }
 
     if (!this.closed) return;
 
-    // Draw constraint glyphs (H, V)
+    const conflictingSet = new Set((this.lastSolveResult?.conflictingConstraints || []).map((c) => c.id));
+
+    // Draw constraint glyphs (H, V, ⊥, ∥, =, •, 🔒)
     for (const c of this.solver.constraints) {
+      const isConflicted = conflictingSet.has(c.id);
+      let char = '';
+      let color = isConflicted ? '#ef4444' : '#0284c7';
+      let pos3D = null;
+
       if (c.type === 'horizontal' || c.type === 'vertical') {
         const ptA = this.solver.getPoint(c.pA);
         const ptB = this.solver.getPoint(c.pB);
-        if (!ptA || !ptB) continue;
-        const mid3D = this.sketchPlane.to3D((ptA.u + ptB.u) / 2, (ptA.v + ptB.v) / 2);
-        const glyph = makeGlyphSprite(c.type === 'horizontal' ? 'H' : 'V');
-        glyph.position.copy(mid3D);
+        if (ptA && ptB) {
+          pos3D = this.sketchPlane.to3D((ptA.u + ptB.u) / 2, (ptA.v + ptB.v) / 2);
+          char = c.type === 'horizontal' ? 'H' : 'V';
+          color = isConflicted ? '#ef4444' : '#0284c7';
+        }
+      } else if (c.type === 'perpendicular') {
+        const ptA = this.solver.getPoint(c.s1A);
+        const ptB = this.solver.getPoint(c.s1B);
+        if (ptA && ptB) {
+          pos3D = this.sketchPlane.to3D((ptA.u + ptB.u) / 2, (ptA.v + ptB.v) / 2);
+          char = '⊥';
+          color = isConflicted ? '#ef4444' : '#059669';
+        }
+      } else if (c.type === 'parallel') {
+        const ptA = this.solver.getPoint(c.s1A);
+        const ptB = this.solver.getPoint(c.s1B);
+        if (ptA && ptB) {
+          pos3D = this.sketchPlane.to3D((ptA.u + ptB.u) / 2, (ptA.v + ptB.v) / 2);
+          char = '∥';
+          color = isConflicted ? '#ef4444' : '#d97706';
+        }
+      } else if (c.type === 'equal_length') {
+        const ptA = this.solver.getPoint(c.s1A);
+        const ptB = this.solver.getPoint(c.s1B);
+        if (ptA && ptB) {
+          pos3D = this.sketchPlane.to3D((ptA.u + ptB.u) / 2, (ptA.v + ptB.v) / 2);
+          char = '=';
+          color = isConflicted ? '#ef4444' : '#7c3aed';
+        }
+      } else if (c.type === 'coincident') {
+        const ptA = this.solver.getPoint(c.pA);
+        if (ptA) {
+          pos3D = this.sketchPlane.to3D(ptA.u, ptA.v);
+          char = '•';
+          color = isConflicted ? '#ef4444' : '#0284c7';
+        }
+      } else if (c.type === 'midpoint') {
+        const ptM = this.solver.getPoint(c.pM);
+        if (ptM) {
+          pos3D = this.sketchPlane.to3D(ptM.u, ptM.v);
+          char = 'M';
+          color = isConflicted ? '#ef4444' : '#0d9488';
+        }
+      } else if (c.type === 'fix') {
+        const ptA = this.solver.getPoint(c.pA);
+        if (ptA) {
+          pos3D = this.sketchPlane.to3D(ptA.u, ptA.v);
+          char = '🔒';
+          color = isConflicted ? '#ef4444' : '#475569';
+        }
+      }
+
+      if (pos3D && char) {
+        const glyph = makeGlyphSprite(isConflicted ? '✕' : char, color);
+        glyph.position.copy(pos3D);
+        glyph.userData = {
+          isConstraintGlyph: true,
+          constraint: c,
+          isConflicted
+        };
         this.group.add(glyph);
       }
     }
@@ -461,6 +590,7 @@ export class SketchSession {
         const ptB = this.solver.getPoint(c.pB);
         if (!ptA || !ptB) continue;
 
+        const isConflicted = conflictingSet.has(c.id);
         const midU = (ptA.u + ptB.u) / 2;
         const midV = (ptA.v + ptB.v) / 2;
         const du = ptB.u - ptA.u;
@@ -480,13 +610,15 @@ export class SketchSession {
           constraint: c,
           pA: c.pA,
           pB: c.pB,
-          distance: c.distance
+          distance: c.distance,
+          isConflicted
         };
         this.group.add(sprite);
 
         // Leader line connecting segment midpoint to dimension badge
+        const leaderColor = isConflicted ? 0xef4444 : 0x38bdf8;
         const leaderGeo = new THREE.BufferGeometry().setFromPoints([midPos, badgePos]);
-        const leaderMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, opacity: 0.6, transparent: true });
+        const leaderMat = new THREE.LineBasicMaterial({ color: leaderColor, opacity: 0.7, transparent: true });
         const leaderLine = new THREE.Line(leaderGeo, leaderMat);
         this.group.add(leaderLine);
       }
