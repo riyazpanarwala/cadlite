@@ -120,6 +120,28 @@ ipcMain.handle('geometry:shell', async (_evt, request) => {
   }
 });
 
+ipcMain.handle('geometry:sweep', async (_evt, request) => {
+  try {
+    const { performSweep } = require('./main/occ-service.js');
+    const meshData = await performSweep(request);
+    return { ok: true, meshData };
+  } catch (err) {
+    console.error('Sweep op failed:', err);
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
+ipcMain.handle('geometry:loft', async (_evt, request) => {
+  try {
+    const { performLoft } = require('./main/occ-service.js');
+    const meshData = await performLoft(request);
+    return { ok: true, meshData };
+  } catch (err) {
+    console.error('Loft op failed:', err);
+    return { ok: false, error: err.message || String(err) };
+  }
+});
+
 ipcMain.handle('geometry:getTopology', async (_evt, shapeDef) => {
   try {
     const { getShapeMeshAndTopology } = require('./main/occ-service.js');

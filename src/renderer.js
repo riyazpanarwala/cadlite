@@ -9,6 +9,8 @@ import { createPrimitivePart, rebuildPrimitiveGeometry } from './geometry/primit
 import { SketchSession, createPlaneFromFace } from './geometry/sketch.js';
 import { extrudeSketch, rebuildExtrudeGeometry } from './geometry/extrude.js';
 import { revolveSketch, rebuildRevolveGeometry } from './geometry/revolve.js';
+import { createSweepPart, SWEEP_PRESETS } from './geometry/sweep.js';
+import { createLoftPart, LOFT_PRESETS } from './geometry/loft.js';
 import { createRectangularPattern, createCircularPattern, createMirrorPart, clonePart } from './geometry/pattern.js';
 import { applyCoincidentMate, applyConcentricMate, applyDistanceMate } from './assembly/mates.js';
 import { booleanOp } from './geometry/boolean.js';
@@ -456,6 +458,103 @@ document.getElementById('btn-revolve')?.addEventListener('click', () => {
     if (plane) setMode('sketch', plane);
   }
 });
+
+async function handleSweepAction() {
+  let profilePoints2D = null;
+  if (mode === 'sketch' && activeSketch && activeSketch.isComplete()) {
+    profilePoints2D = activeSketch.toPoints2D();
+  }
+
+  const presetChoice = window.prompt(
+    "Sweep Feature along 3D Trajectory Path:\n\n" +
+    "1: 90° Elbow Pipe\n" +
+    "2: S-Curve Conduit\n" +
+    "3: 180° U-Bend Loop\n\n" +
+    "Choose trajectory path (1, 2, or 3):",
+    "1"
+  );
+  if (!presetChoice) return;
+
+  let pathPoints3D = SWEEP_PRESETS.elbow.path;
+  let sweepName = 'Elbow Pipe';
+  if (presetChoice.trim() === '2') {
+    pathPoints3D = SWEEP_PRESETS.sCurve.path;
+    sweepName = 'S-Curve Conduit';
+  } else if (presetChoice.trim() === '3') {
+    pathPoints3D = SWEEP_PRESETS.uBend.path;
+    sweepName = 'U-Bend Loop';
+  }
+
+  let radius = 8;
+  if (!profilePoints2D) {
+    const radStr = window.prompt(`Enter pipe/tube radius (mm):`, '8');
+    if (radStr) {
+      const r = parseFloat(radStr);
+      if (!isNaN(r) && r > 0) radius = r;
+    }
+  }
+
+  const part = createSweepPart({
+    name: `${sweepName} ${assembly.parts.length + 1}`,
+    pathPoints3D,
+    profilePoints2D,
+    radius
+  });
+
+  assembly.addPart(part);
+  if (mode === 'sketch') setMode('assembly');
+  selection.select(part);
+  treePanel.render();
+  propertiesPanel.render();
+
+  setStatus(`Generating OpenCascade B-Rep for "${part.name}"...`);
+  await recomputePart(part);
+  treePanel.render();
+  propertiesPanel.render();
+  setStatus(`Created 3D Swept Solid: "${part.name}"`);
+}
+
+async function handleLoftAction() {
+  const choice = window.prompt(
+    "Loft Feature through Multiple Cross-Sections:\n\n" +
+    "1: Circular-to-Square Duct Transition (Circle 24mm -> Square 36mm)\n" +
+    "2: De Laval Rocket Nozzle (3 Sections)\n" +
+    "3: Tapered Rectangular Funnel (60x40 -> 24x16)\n\n" +
+    "Choose loft profile transition (1, 2, or 3):",
+    "1"
+  );
+  if (!choice) return;
+
+  let sections = LOFT_PRESETS.circleToSquare.sections;
+  let loftName = 'Duct Transition';
+  if (choice.trim() === '2') {
+    sections = LOFT_PRESETS.rocketNozzle.sections;
+    loftName = 'Rocket Nozzle';
+  } else if (choice.trim() === '3') {
+    sections = LOFT_PRESETS.taperedChamber.sections;
+    loftName = 'Tapered Funnel';
+  }
+
+  const part = createLoftPart({
+    name: `${loftName} ${assembly.parts.length + 1}`,
+    sections
+  });
+
+  assembly.addPart(part);
+  if (mode === 'sketch') setMode('assembly');
+  selection.select(part);
+  treePanel.render();
+  propertiesPanel.render();
+
+  setStatus(`Generating OpenCascade B-Rep for "${part.name}"...`);
+  await recomputePart(part);
+  treePanel.render();
+  propertiesPanel.render();
+  setStatus(`Created 3D Lofted Solid: "${part.name}"`);
+}
+
+document.getElementById('btn-sweep')?.addEventListener('click', handleSweepAction);
+document.getElementById('btn-loft')?.addEventListener('click', handleLoftAction);
 
 // ---------------------------------------------------------------------
 // Navigation Bar & View buttons

@@ -153,6 +153,115 @@ function makeRevolShape(oc, params) {
   return revol.Shape();
 }
 
+function makeSweepShape(oc, params) {
+  const { profilePoints2D, pathPoints3D, radius } = params;
+
+  if (!Array.isArray(pathPoints3D) || pathPoints3D.length < 2) {
+    throw new Error('Sweep requires at least 2 path points in 3D');
+  }
+
+  // 1. Build spine wire from 3D path polyline
+  const spinePoly = new oc.BRepBuilderAPI_MakePolygon_1();
+  for (const p of pathPoints3D) {
+    spinePoly.Add_1(new oc.gp_Pnt_3(p[0], p[1], p[2]));
+  }
+  const spineWire = spinePoly.Wire();
+
+  // 2. Establish local orthonormal frame at start of spine
+  const p0 = pathPoints3D[0];
+  const p1 = pathPoints3D[1];
+  const tangent = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]];
+  const tanLen = Math.hypot(tangent[0], tangent[1], tangent[2]) || 1;
+  const dirZ = [tangent[0] / tanLen, tangent[1] / tanLen, tangent[2] / tanLen];
+
+  let dirX = [1, 0, 0];
+  if (Math.abs(dirZ[0] * dirX[0] + dirZ[1] * dirX[1] + dirZ[2] * dirX[2]) > 0.85) {
+    dirX = [0, 1, 0];
+  }
+  let dirY = [
+    dirZ[1] * dirX[2] - dirZ[2] * dirX[1],
+    dirZ[2] * dirX[0] - dirZ[0] * dirX[2],
+    dirZ[0] * dirX[1] - dirZ[1] * dirX[0]
+  ];
+  const yLen = Math.hypot(dirY[0], dirY[1], dirY[2]) || 1;
+  dirY[0] /= yLen; dirY[1] /= yLen; dirY[2] /= yLen;
+
+  dirX = [
+    dirY[1] * dirZ[2] - dirY[2] * dirZ[1],
+    dirY[2] * dirZ[0] - dirY[0] * dirZ[2],
+    dirY[0] * dirZ[1] - dirY[1] * dirZ[0]
+  ];
+
+  let pts2D = profilePoints2D;
+  if (!pts2D || pts2D.length < 3) {
+    const r = radius || 8;
+    const segs = 24;
+    pts2D = [];
+    for (let i = 0; i < segs; i++) {
+      const a = (i / segs) * Math.PI * 2;
+      pts2D.push([Math.cos(a) * r, Math.sin(a) * r]);
+    }
+  }
+
+  const profPoly = new oc.BRepBuilderAPI_MakePolygon_1();
+  for (const [u, v] of pts2D) {
+    const px = p0[0] + dirX[0] * u + dirY[0] * v;
+    const py = p0[1] + dirX[1] * u + dirY[1] * v;
+    const pz = p0[2] + dirX[2] * u + dirY[2] * v;
+    profPoly.Add_1(new oc.gp_Pnt_3(px, py, pz));
+  }
+  profPoly.Close();
+  const profileFace = new oc.BRepBuilderAPI_MakeFace_15(profPoly.Wire(), false).Face();
+
+  const pipe = new oc.BRepOffsetAPI_MakePipe_1(spineWire, profileFace);
+  pipe.Build(new oc.Message_ProgressRange_1());
+  if (!pipe.IsDone() || pipe.Shape().IsNull()) {
+    throw new Error('Sweep operation failed in OpenCascade');
+  }
+  return pipe.Shape();
+}
+
+function makeLoftShape(oc, params) {
+  const { sections, ruled = false } = params;
+  if (!Array.isArray(sections) || sections.length < 2) {
+    throw new Error('Loft requires at least 2 cross-section profiles');
+  }
+
+  const thru = new oc.BRepOffsetAPI_ThruSections(true, ruled, 1.0e-6);
+
+  for (const sec of sections) {
+    let pts3D = sec.points3D;
+    if (!pts3D && sec.points2D) {
+      const z = sec.z || 0;
+      const m = sec.planeMatrix;
+      if (Array.isArray(m) && m.length === 16) {
+        pts3D = sec.points2D.map(([u, v]) => [
+          m[0] * u + m[4] * v + m[12],
+          m[1] * u + m[5] * v + m[13],
+          m[2] * u + m[6] * v + m[14]
+        ]);
+      } else {
+        pts3D = sec.points2D.map(([u, v]) => [u, v, z]);
+      }
+    }
+
+    if (!pts3D || pts3D.length < 3) continue;
+
+    const poly = new oc.BRepBuilderAPI_MakePolygon_1();
+    for (const p of pts3D) {
+      poly.Add_1(new oc.gp_Pnt_3(p[0], p[1], p[2]));
+    }
+    poly.Close();
+    thru.AddWire(poly.Wire());
+  }
+
+  thru.Build(new oc.Message_ProgressRange_1());
+  if (!thru.IsDone() || thru.Shape().IsNull()) {
+    throw new Error('Loft operation failed in OpenCascade');
+  }
+  return thru.Shape();
+}
+
 function applyChamferToShape(oc, shape, distance = 5, filter = 'all', targetEdgeIds = []) {
   const chamfer = new oc.BRepFilletAPI_MakeChamfer(shape);
   let edgesToChamfer = [];
@@ -311,6 +420,30 @@ function buildShape(oc, def) {
       const cut = new oc.BRepAlgoAPI_Cut_3(base, prism, new oc.Message_ProgressRange_1());
       cut.Build(new oc.Message_ProgressRange_1());
       shape = cut.Shape();
+      break;
+    }
+    case 'sweep': {
+      const swept = makeSweepShape(oc, def.params);
+      if (def.params.basePart) {
+        const base = buildShape(oc, def.params.basePart);
+        const fuse = new oc.BRepAlgoAPI_Fuse_3(base, swept, new oc.Message_ProgressRange_1());
+        fuse.Build(new oc.Message_ProgressRange_1());
+        shape = fuse.Shape();
+      } else {
+        shape = swept;
+      }
+      break;
+    }
+    case 'loft': {
+      const lofted = makeLoftShape(oc, def.params);
+      if (def.params.basePart) {
+        const base = buildShape(oc, def.params.basePart);
+        const fuse = new oc.BRepAlgoAPI_Fuse_3(base, lofted, new oc.Message_ProgressRange_1());
+        fuse.Build(new oc.Message_ProgressRange_1());
+        shape = fuse.Shape();
+      } else {
+        shape = lofted;
+      }
       break;
     }
     case 'boolean': {
@@ -699,11 +832,31 @@ async function getShapeMeshAndTopology(shapeDef) {
   return { meshData, topology: { faces: meshData.faces, edges: meshData.edges } };
 }
 
+/**
+ * Performs a Sweep operation along a 3D path.
+ */
+async function performSweep(params) {
+  const oc = await getOC();
+  const shape = makeSweepShape(oc, params);
+  return shapeToMeshData(oc, shape);
+}
+
+/**
+ * Performs a Loft operation through multiple cross-sections.
+ */
+async function performLoft(params) {
+  const oc = await getOC();
+  const shape = makeLoftShape(oc, params);
+  return shapeToMeshData(oc, shape);
+}
+
 module.exports = {
   performBoolean,
   performChamfer,
   performFillet,
   performShell,
+  performSweep,
+  performLoft,
   exportToStep,
   importFromStep,
   getShapeMeshAndTopology

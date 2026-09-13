@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('cadlite', {
   chamferOp: (request) => ipcRenderer.invoke('geometry:chamfer', request),
   filletOp: (request) => ipcRenderer.invoke('geometry:fillet', request),
   shellOp: (request) => ipcRenderer.invoke('geometry:shell', request),
+  sweepOp: (request) => ipcRenderer.invoke('geometry:sweep', request),
+  loftOp: (request) => ipcRenderer.invoke('geometry:loft', request),
   getTopology: (shapeDef) => ipcRenderer.invoke('geometry:getTopology', shapeDef),
   exportStep: (parts) => ipcRenderer.invoke('step:export', parts),
   importStep: () => ipcRenderer.invoke('step:import'),

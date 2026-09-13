@@ -111,6 +111,22 @@ export async function recomputePart(part) {
           targetFaceId: feat.params.targetFaceId
         }
       };
+    } else if (feat.type === 'sweep') {
+      currentShapeDef = {
+        kind: 'sweep',
+        params: {
+          basePart: currentShapeDef,
+          ...feat.params
+        }
+      };
+    } else if (feat.type === 'loft') {
+      currentShapeDef = {
+        kind: 'loft',
+        params: {
+          basePart: currentShapeDef,
+          ...feat.params
+        }
+      };
     } else if (feat.type === 'hole') {
       const dia = feat.params.diameter || 12;
       const depth = feat.params.depth || 200;
