@@ -65,7 +65,16 @@ function buildPartFromData(data) {
       }
     }
 
-    part = new Part({ name: data.name, type: 'part', mesh, kind: data.kind, color: data.color, params: data.params, topology: topo });
+    part = new Part({
+      name: data.name,
+      type: 'part',
+      mesh,
+      kind: data.kind,
+      color: data.color,
+      params: data.params,
+      topology: topo,
+      featureTree: data.featureTree || null
+    });
   }
 
   part.id = data.id; // preserve original ids so mate records / references stay valid

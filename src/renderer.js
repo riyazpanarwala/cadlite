@@ -18,6 +18,8 @@ import { serializeProject, deserializeProject } from './project/save-load.js';
 import { ViewCube } from './ui/viewcube.js';
 import { chamferPart, filletPart, shellPart } from './geometry/modifiers.js';
 import { DrawingSheetGenerator } from './drawing/drawing-sheet.js';
+import { recomputePart } from './history/feature-evaluator.js';
+import { FeatureTree, FeatureNode } from './history/FeatureTree.js';
 
 // ---------------------------------------------------------------------
 // Bootstrapping
@@ -28,7 +30,14 @@ const viewport = new Viewport(canvas);
 const assembly = new Assembly(viewport.scene);
 const mateSolver = new MateSolver(assembly);
 
-const treePanel = new TreePanel(document.getElementById('tree-root'), assembly, null, viewport); // selection wired below
+const treePanel = new TreePanel(document.getElementById('tree-root'), assembly, null, viewport, {
+  onRecompute: async (part) => {
+    setStatus(`Re-evaluating history for "${part.name}"...`);
+    await recomputePart(part);
+    propertiesPanel.render();
+    setStatus(`Updated "${part.name}" history`);
+  }
+});
 const statusLeft = document.getElementById('status-left');
 const viewportHint = document.getElementById('viewport-hint');
 const mateStatusEl = document.getElementById('mate-status');
@@ -115,7 +124,13 @@ function resetScene(newDocName = 'Part1') {
 }
 
 const propertiesPanel = new PropertiesPanel(document.getElementById('properties-body'), selection, {
-  onGeometryChange: (part) => {
+  onGeometryChange: async (part) => {
+    if (part.featureTree && part.featureTree.features.length > 0) {
+      part.featureTree.features[0].params = { ...part.params };
+      await recomputePart(part);
+      treePanel.render();
+      return;
+    }
     if (part.kind === 'extrude') {
       rebuildExtrudeGeometry(part);
       return;
@@ -724,63 +739,62 @@ async function runBoolean(op) {
 
 document.getElementById('btn-chamfer')?.addEventListener('click', async () => {
   const selectedEdges = selection.selectedEdges || [];
+  let targetPart;
+  let targetEdgeIds = [];
+
   if (selectedEdges.length > 0) {
-    const targetPart = selectedEdges[0].part;
-    const targetEdgeIds = selectedEdges.filter((e) => e.part === targetPart).map((e) => e.topoId);
-
-    const distStr = window.prompt(
-      `Targeted Chamfer Feature:\n\nEnter chamfer distance (mm) for ${targetEdgeIds.length} selected edge(s):\n${targetEdgeIds.slice(0, 3).join('\n')}${targetEdgeIds.length > 3 ? '\n...' : ''}`,
-      '5'
-    );
-    const dist = parseFloat(distStr);
-    if (!distStr || isNaN(dist) || dist <= 0) return;
-
-    gizmo.detach();
-    setStatus(`Applying Targeted Chamfer on ${targetEdgeIds.length} edge(s)...`);
-
-    try {
-      const chamferedPart = await chamferPart(targetPart, dist, 'all', targetEdgeIds);
-      assembly.removePart(targetPart);
-      mateSolver.removeMatesFor(targetPart);
-      assembly.addPart(chamferedPart);
-      selection.select(chamferedPart);
-      treePanel.render();
-      propertiesPanel.render();
-      setStatus(`Targeted Chamfer applied (${dist}mm on ${targetEdgeIds.length} edge(s))`);
-    } catch (err) {
-      console.error('Chamfer error:', err);
-      setStatus(`Chamfer failed: ${err.message}`);
-      window.alert(`Chamfer failed:\n\n${err.message}`);
-    }
-    return;
+    targetPart = selectedEdges[0].part;
+    targetEdgeIds = selectedEdges.filter((e) => e.part === targetPart).map((e) => e.topoId);
+  } else {
+    targetPart = selection.primary();
   }
 
-  const p = selection.primary();
-  if (!p || p.type !== 'part') {
+  if (!targetPart || targetPart.type !== 'part') {
     setStatus('Select a solid part (or switch to Edge filter and select edges) to apply Chamfer');
     return;
   }
-  const distStr = window.prompt(`Chamfer Feature:\nEnter chamfer distance (mm):`, '5');
+
+  const promptMsg = targetEdgeIds.length > 0
+    ? `Targeted Chamfer Feature:\n\nEnter chamfer distance (mm) for ${targetEdgeIds.length} selected edge(s):\n${targetEdgeIds.slice(0, 3).join('\n')}${targetEdgeIds.length > 3 ? '\n...' : ''}`
+    : `Chamfer Feature for "${targetPart.name}":\nEnter chamfer distance (mm):`;
+
+  const distStr = window.prompt(promptMsg, '5');
   const dist = parseFloat(distStr);
   if (!distStr || isNaN(dist) || dist <= 0) return;
 
-  const modeChoice = window.confirm(
-    `Chamfer Mode for "${p.name}":\n\nClick [OK] for Vertical Corner Edges (like Inventor reference plate)\nClick [Cancel] for All Edges`
-  );
-  const filter = modeChoice ? 'vertical' : 'all';
+  let filter = 'all';
+  if (targetEdgeIds.length === 0) {
+    const modeChoice = window.confirm(
+      `Chamfer Mode for "${targetPart.name}":\n\nClick [OK] for Vertical Corner Edges\nClick [Cancel] for All Edges`
+    );
+    filter = modeChoice ? 'vertical' : 'all';
+  }
 
   gizmo.detach();
   setStatus(`Applying Chamfer (${dist}mm)...`);
 
   try {
-    const chamferedPart = await chamferPart(p, dist, filter);
-    assembly.removePart(p);
-    mateSolver.removeMatesFor(p);
-    assembly.addPart(chamferedPart);
-    selection.select(chamferedPart);
+    if (!targetPart.featureTree) {
+      targetPart.featureTree = new FeatureTree([
+        new FeatureNode({ id: `feat_${targetPart.id}_base`, name: targetPart.name, type: targetPart.kind, params: { ...targetPart.params } })
+      ]);
+    }
+    const featCount = targetPart.featureTree.features.length;
+    const featName = `Chamfer ${featCount}`;
+
+    targetPart.featureTree.addFeature({
+      name: featName,
+      type: 'chamfer',
+      params: { distance: dist, filter, targetEdgeIds },
+      targetRefs: { targetEdgeIds }
+    });
+
+    await recomputePart(targetPart);
+    selection.clearSubSelections(false);
+    selection.select(targetPart);
     treePanel.render();
     propertiesPanel.render();
-    setStatus(`Chamfer applied (${dist}mm, ${filter} edges)`);
+    setStatus(`Chamfer feature "${featName}" added to history (${dist}mm)`);
   } catch (err) {
     console.error('Chamfer error:', err);
     setStatus(`Chamfer failed: ${err.message}`);
@@ -790,63 +804,62 @@ document.getElementById('btn-chamfer')?.addEventListener('click', async () => {
 
 document.getElementById('btn-fillet')?.addEventListener('click', async () => {
   const selectedEdges = selection.selectedEdges || [];
+  let targetPart;
+  let targetEdgeIds = [];
+
   if (selectedEdges.length > 0) {
-    const targetPart = selectedEdges[0].part;
-    const targetEdgeIds = selectedEdges.filter((e) => e.part === targetPart).map((e) => e.topoId);
-
-    const radStr = window.prompt(
-      `Targeted Fillet Feature:\n\nEnter fillet radius (mm) for ${targetEdgeIds.length} selected edge(s):\n${targetEdgeIds.slice(0, 3).join('\n')}${targetEdgeIds.length > 3 ? '\n...' : ''}`,
-      '3'
-    );
-    const rad = parseFloat(radStr);
-    if (!radStr || isNaN(rad) || rad <= 0) return;
-
-    gizmo.detach();
-    setStatus(`Applying Targeted Fillet on ${targetEdgeIds.length} edge(s)...`);
-
-    try {
-      const filletedPart = await filletPart(targetPart, rad, 'all', targetEdgeIds);
-      assembly.removePart(targetPart);
-      mateSolver.removeMatesFor(targetPart);
-      assembly.addPart(filletedPart);
-      selection.select(filletedPart);
-      treePanel.render();
-      propertiesPanel.render();
-      setStatus(`Targeted Fillet applied (R${rad}mm on ${targetEdgeIds.length} edge(s))`);
-    } catch (err) {
-      console.error('Fillet error:', err);
-      setStatus(`Fillet failed: ${err.message}`);
-      window.alert(`Fillet failed:\n\n${err.message}`);
-    }
-    return;
+    targetPart = selectedEdges[0].part;
+    targetEdgeIds = selectedEdges.filter((e) => e.part === targetPart).map((e) => e.topoId);
+  } else {
+    targetPart = selection.primary();
   }
 
-  const p = selection.primary();
-  if (!p || p.type !== 'part') {
+  if (!targetPart || targetPart.type !== 'part') {
     setStatus('Select a solid part (or switch to Edge filter and select edges) to apply Fillet');
     return;
   }
-  const radStr = window.prompt(`Fillet Feature:\nEnter fillet radius (mm):`, '3');
+
+  const promptMsg = targetEdgeIds.length > 0
+    ? `Targeted Fillet Feature:\n\nEnter fillet radius (mm) for ${targetEdgeIds.length} selected edge(s):\n${targetEdgeIds.slice(0, 3).join('\n')}${targetEdgeIds.length > 3 ? '\n...' : ''}`
+    : `Fillet Feature for "${targetPart.name}":\nEnter fillet radius (mm):`;
+
+  const radStr = window.prompt(promptMsg, '3');
   const rad = parseFloat(radStr);
   if (!radStr || isNaN(rad) || rad <= 0) return;
 
-  const modeChoice = window.confirm(
-    `Fillet Mode for "${p.name}":\n\nClick [OK] for All Edges\nClick [Cancel] for Vertical Edges only`
-  );
-  const filter = modeChoice ? 'all' : 'vertical';
+  let filter = 'all';
+  if (targetEdgeIds.length === 0) {
+    const modeChoice = window.confirm(
+      `Fillet Mode for "${targetPart.name}":\n\nClick [OK] for All Edges\nClick [Cancel] for Vertical Edges only`
+    );
+    filter = modeChoice ? 'vertical' : 'all';
+  }
 
   gizmo.detach();
   setStatus(`Applying Fillet (R${rad}mm)...`);
 
   try {
-    const filletedPart = await filletPart(p, rad, filter);
-    assembly.removePart(p);
-    mateSolver.removeMatesFor(p);
-    assembly.addPart(filletedPart);
-    selection.select(filletedPart);
+    if (!targetPart.featureTree) {
+      targetPart.featureTree = new FeatureTree([
+        new FeatureNode({ id: `feat_${targetPart.id}_base`, name: targetPart.name, type: targetPart.kind, params: { ...targetPart.params } })
+      ]);
+    }
+    const featCount = targetPart.featureTree.features.length;
+    const featName = `Fillet ${featCount}`;
+
+    targetPart.featureTree.addFeature({
+      name: featName,
+      type: 'fillet',
+      params: { radius: rad, filter, targetEdgeIds },
+      targetRefs: { targetEdgeIds }
+    });
+
+    await recomputePart(targetPart);
+    selection.clearSubSelections(false);
+    selection.select(targetPart);
     treePanel.render();
     propertiesPanel.render();
-    setStatus(`Fillet applied (R${rad}mm, ${filter} edges)`);
+    setStatus(`Fillet feature "${featName}" added to history (R${rad}mm)`);
   } catch (err) {
     console.error('Fillet error:', err);
     setStatus(`Fillet failed: ${err.message}`);
@@ -876,28 +889,26 @@ document.getElementById('btn-hole')?.addEventListener('click', async () => {
   const depthVal = isThrough ? 200 : parseFloat(depthChoice);
   if (isNaN(depthVal) || depthVal <= 0) return;
 
-  const radius = dia / 2;
-  const height = depthVal;
-  const cutter = createPrimitivePart('cylinder');
-  cutter.params.radius = radius;
-  cutter.params.height = height;
-  cutter.name = `HoleCutter_${dia}mm`;
-
-  // Align cutter with target part
-  cutter.object3D.position.copy(p.object3D.position);
-  cutter.object3D.updateMatrixWorld(true);
-
-  setStatus(`Cutting hole (Ø${dia}mm) into "${p.name}"...`);
+  setStatus(`Adding hole (Ø${dia}mm) to "${p.name}" history...`);
   try {
-    const resultPart = await booleanOp('cut', p, cutter);
-    resultPart.name = `${p.name}_Hole`;
-    assembly.removePart(p);
-    mateSolver.removeMatesFor(p);
-    assembly.addPart(resultPart);
-    selection.select(resultPart);
+    if (!p.featureTree) {
+      p.featureTree = new FeatureTree([
+        new FeatureNode({ id: `feat_${p.id}_base`, name: p.name, type: p.kind, params: { ...p.params } })
+      ]);
+    }
+    const featCount = p.featureTree.features.length;
+    const featName = `Hole ${featCount} (Ø${dia}mm)`;
+
+    p.featureTree.addFeature({
+      name: featName,
+      type: 'hole',
+      params: { diameter: dia, depth: depthVal }
+    });
+
+    await recomputePart(p);
     treePanel.render();
     propertiesPanel.render();
-    setStatus(`Hole created (Ø${dia}mm, ${isThrough ? 'Through-All' : depthVal + 'mm'})`);
+    setStatus(`Hole feature "${featName}" added to history`);
   } catch (err) {
     console.error('Hole creation failed:', err);
     setStatus(`Hole failed: ${err.message}`);

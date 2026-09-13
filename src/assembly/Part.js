@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FeatureTree, FeatureNode } from '../history/FeatureTree.js';
 
 let nextId = 1;
 
@@ -12,7 +13,7 @@ let nextId = 1;
  * source of truth for transforms.
  */
 export class Part {
-  constructor({ name, type = 'part', mesh = null, kind = 'box', color = '#4fb0ff', params = {}, topology = null }) {
+  constructor({ name, type = 'part', mesh = null, kind = 'box', color = '#4fb0ff', params = {}, topology = null, featureTree = null }) {
     this.id = 'part_' + nextId++;
     this.name = name || `${kind}_${this.id}`;
     this.type = type; // 'part' | 'assembly'
@@ -24,6 +25,22 @@ export class Part {
     this.parent = null;
     this.visible = true;
     this.mates = []; // mate definitions applied that reference this part
+
+    // Initialize Parametric Feature Tree (DAG)
+    if (featureTree) {
+      this.featureTree = featureTree instanceof FeatureTree ? featureTree : FeatureTree.fromJSON(featureTree);
+    } else if (type === 'part') {
+      this.featureTree = new FeatureTree([
+        new FeatureNode({
+          id: `feat_${this.id}_base`,
+          name: `${this.name} Base`,
+          type: this.kind,
+          params: { ...this.params }
+        })
+      ]);
+    } else {
+      this.featureTree = null;
+    }
 
     if (type === 'assembly') {
       this.object3D = new THREE.Group();
@@ -146,6 +163,7 @@ export class Part {
       color: this.color,
       params: this.params,
       topology: this.topology,
+      featureTree: this.featureTree ? this.featureTree.toJSON() : null,
       visible: this.visible,
       transform: {
         position: this.object3D.position.toArray(),

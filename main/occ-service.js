@@ -118,38 +118,56 @@ function makeRevolShape(oc, params) {
   return revol.Shape();
 }
 
-function applyChamferToShape(oc, shape, distance = 5, filter = 'all') {
+function applyChamferToShape(oc, shape, distance = 5, filter = 'all', targetEdgeIds = []) {
   const chamfer = new oc.BRepFilletAPI_MakeChamfer(shape);
-  const exp = new oc.TopExp_Explorer_2(shape, oc.TopAbs_ShapeEnum.TopAbs_EDGE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
-  let count = 0;
-  while (exp.More()) {
-    const edge = oc.TopoDS.Edge_1(exp.Current());
-    if (edgeMatchesFilter(oc, edge, filter)) {
-      try {
-        chamfer.Add_2(distance, edge);
-        count++;
-      } catch (err) {}
+  let edgesToChamfer = [];
+  if (Array.isArray(targetEdgeIds) && targetEdgeIds.length > 0) {
+    edgesToChamfer = resolveEdgesByTopoIds(oc, shape, targetEdgeIds);
+  }
+  if (edgesToChamfer.length === 0) {
+    const exp = new oc.TopExp_Explorer_2(shape, oc.TopAbs_ShapeEnum.TopAbs_EDGE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+    while (exp.More()) {
+      const edge = oc.TopoDS.Edge_1(exp.Current());
+      if (edgeMatchesFilter(oc, edge, filter)) {
+        edgesToChamfer.push(edge);
+      }
+      exp.Next();
     }
-    exp.Next();
+  }
+  let count = 0;
+  for (const edge of edgesToChamfer) {
+    try {
+      chamfer.Add_2(distance, edge);
+      count++;
+    } catch (err) {}
   }
   if (count === 0) return shape;
   chamfer.Build(new oc.Message_ProgressRange_1());
   return chamfer.IsDone() ? chamfer.Shape() : shape;
 }
 
-function applyFilletToShape(oc, shape, radius = 3, filter = 'all') {
+function applyFilletToShape(oc, shape, radius = 3, filter = 'all', targetEdgeIds = []) {
   const fillet = new oc.BRepFilletAPI_MakeFillet(shape, oc.ChFi3d_FilletShape.ChFi3d_Rational);
-  const exp = new oc.TopExp_Explorer_2(shape, oc.TopAbs_ShapeEnum.TopAbs_EDGE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
-  let count = 0;
-  while (exp.More()) {
-    const edge = oc.TopoDS.Edge_1(exp.Current());
-    if (edgeMatchesFilter(oc, edge, filter)) {
-      try {
-        fillet.Add_2(radius, edge);
-        count++;
-      } catch (err) {}
+  let edgesToFillet = [];
+  if (Array.isArray(targetEdgeIds) && targetEdgeIds.length > 0) {
+    edgesToFillet = resolveEdgesByTopoIds(oc, shape, targetEdgeIds);
+  }
+  if (edgesToFillet.length === 0) {
+    const exp = new oc.TopExp_Explorer_2(shape, oc.TopAbs_ShapeEnum.TopAbs_EDGE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+    while (exp.More()) {
+      const edge = oc.TopoDS.Edge_1(exp.Current());
+      if (edgeMatchesFilter(oc, edge, filter)) {
+        edgesToFillet.push(edge);
+      }
+      exp.Next();
     }
-    exp.Next();
+  }
+  let count = 0;
+  for (const edge of edgesToFillet) {
+    try {
+      fillet.Add_2(radius, edge);
+      count++;
+    } catch (err) {}
   }
   if (count === 0) return shape;
   fillet.Build(new oc.Message_ProgressRange_1());
@@ -219,12 +237,24 @@ function buildShape(oc, def) {
     case 'revolve': shape = makeRevolShape(oc, def.params); break;
     case 'chamfer': {
       const base = buildShape(oc, def.params.basePart);
-      shape = applyChamferToShape(oc, base, def.params.distance || def.params.chamferDistance || 5, def.params.filter);
+      shape = applyChamferToShape(
+        oc,
+        base,
+        def.params.distance || def.params.chamferDistance || 5,
+        def.params.filter,
+        def.params.targetEdgeIds
+      );
       break;
     }
     case 'fillet': {
       const base = buildShape(oc, def.params.basePart);
-      shape = applyFilletToShape(oc, base, def.params.radius || def.params.filletRadius || 3, def.params.filter);
+      shape = applyFilletToShape(
+        oc,
+        base,
+        def.params.radius || def.params.filletRadius || 3,
+        def.params.filter,
+        def.params.targetEdgeIds
+      );
       break;
     }
     case 'shell': {

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 const KIND_ICON = {
-  box: '▢',
+  box: '📦',
   cylinder: '◯',
   sphere: '●',
   cone: '▲',
@@ -10,16 +10,19 @@ const KIND_ICON = {
   fillet: '⌒',
   boolean: '∪',
   revolve: '↻',
+  hole: '🕳',
+  shell: '⛶',
   step: '📦',
   group: '📁'
 };
 
 export class TreePanel {
-  constructor(rootEl, assembly, selection, viewport = null) {
+  constructor(rootEl, assembly, selection, viewport = null, { onRecompute } = {}) {
     this.rootEl = rootEl;
     this.assembly = assembly;
     this.selection = selection;
     this.viewport = viewport;
+    this.onRecompute = onRecompute || (() => {});
     this.docName = 'Part2';
     this.filterText = '';
     this.originExpanded = true;
@@ -291,8 +294,11 @@ export class TreePanel {
 
     wrapper.appendChild(row);
 
-    // Nested sketch under extrude if applicable
-    if (part.kind === 'extrude') {
+    // Parametric Feature Tree History & Rollback Bar
+    if (part.featureTree && part.featureTree.features && part.featureTree.features.length > 0) {
+      this._renderFeatureList(part, wrapper);
+    } else if (part.kind === 'extrude') {
+      // Nested sketch under extrude if applicable
       const sub = document.createElement('div');
       sub.className = 'tree-children';
       const sketchRow = document.createElement('div');
@@ -315,6 +321,101 @@ export class TreePanel {
     }
 
     return wrapper;
+  }
+
+  _renderFeatureList(part, wrapper) {
+    const ft = part.featureTree;
+    if (!ft || ft.features.length === 0) return;
+
+    const listEl = document.createElement('div');
+    listEl.className = 'tree-children feature-list';
+
+    // If rolled back to top (before index 0)
+    if (ft.rollbackIndex === -1) {
+      listEl.appendChild(this._createRollbackBar(part, -1));
+    }
+
+    ft.features.forEach((feat, idx) => {
+      const isRolledBack = ft.isRolledBack(feat.id);
+      const isSuppressed = feat.suppressed;
+
+      const featRow = document.createElement('div');
+      featRow.className = 'tree-node feature-history-item' +
+        (isRolledBack ? ' rolled-back' : '') +
+        (isSuppressed ? ' suppressed' : '');
+
+      const icon = KIND_ICON[feat.type] || '•';
+
+      featRow.innerHTML = `
+        <span class="icon" style="margin-left:6px;">${icon}</span>
+        <span class="label" title="${feat.name} (${feat.type})">${feat.name}</span>
+        <div class="feat-actions">
+          <button class="feat-action-btn ${isSuppressed ? 'active' : ''}" data-act="suppress" title="${isSuppressed ? 'Unsuppress feature' : 'Suppress feature'}">
+            ${isSuppressed ? '⊚' : '⊘'}
+          </button>
+          <button class="feat-action-btn" data-act="roll" title="Roll history to this feature">
+            ⏬
+          </button>
+          ${idx > 0 ? `<button class="feat-action-btn del" data-act="delete" title="Delete feature">✕</button>` : ''}
+        </div>
+      `;
+
+      featRow.querySelector('[data-act="suppress"]')?.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        ft.toggleSuppression(feat.id);
+        await this.onRecompute(part);
+        this.render();
+      });
+
+      featRow.querySelector('[data-act="roll"]')?.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        ft.rollToFeature(feat.id);
+        await this.onRecompute(part);
+        this.render();
+      });
+
+      featRow.querySelector('[data-act="delete"]')?.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (window.confirm(`Delete feature "${feat.name}"?`)) {
+          ft.removeFeature(feat.id);
+          await this.onRecompute(part);
+          this.render();
+        }
+      });
+
+      listEl.appendChild(featRow);
+
+      // Place Rollback Bar immediately below the active rollback index
+      if (idx === ft.rollbackIndex) {
+        listEl.appendChild(this._createRollbackBar(part, idx));
+      }
+    });
+
+    wrapper.appendChild(listEl);
+  }
+
+  _createRollbackBar(part, currentIdx) {
+    const bar = document.createElement('div');
+    bar.className = 'rollback-bar-container';
+    bar.title = 'Rollback Bar (End of Evaluated Features) — Click to roll to end';
+    bar.innerHTML = `
+      <div class="rollback-bar-line"></div>
+      <div class="rollback-bar-pill">
+        <span class="pill-icon">⏸</span>
+        <span class="pill-text">ROLLBACK BAR</span>
+      </div>
+    `;
+
+    bar.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (part.featureTree.rollbackIndex < part.featureTree.features.length - 1) {
+        part.featureTree.rollToEnd();
+        await this.onRecompute(part);
+        this.render();
+      }
+    });
+
+    return bar;
   }
 }
 
