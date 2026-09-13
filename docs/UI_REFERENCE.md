@@ -87,23 +87,22 @@ The tab bar beneath the header organizes tools into contextual ribbons:
 
 ### Sketch Panel
 - **Start 2D Sketch (`#btn-start-sketch`) [Hotkey: `S`]**:
-  - **How it works**:
-    1. Prompts you to pick a work plane: `1` for XY (Front), `2` for XZ (Top/Ground), or `3` for YZ (Right/Side).
-    2. Switches the workspace to Sketch mode.
-    3. Aligns the camera perpendicularly to the plane and displays an orange sketch grid.
+  - **Sketch on 3D Face**: If a planar face of any solid part is selected (via `[▱ Face]` filter mode), clicking **Start 2D Sketch** automatically attaches the sketch coplanar to that 3D face and smoothly aligns the camera perpendicularly to view it ("Normal To" view).
+  - **Standard Origin Planes**: If no face is selected, prompts you to pick an origin work plane: `1` for XY (Front), `2` for XZ (Top/Ground), or `3` for YZ (Right/Side).
+  - Switches the workspace to Sketch mode, displays an aligned orange grid, and activates the 2D constraint solver.
 
 ---
 
 ### Create Panel
 - **Extrude (`#btn-extrude`)**:
-  - **In Sketch Mode**: Prompts for depth in mm (e.g. `20`) and direction (`[OK]` for Normal, `[Cancel]` for Symmetric), then creates a 3D solid extrusion.
-  - **In 3D Assembly Mode**: Prompts you to pick a plane to start drawing a closed sketch profile first.
+  - **In Sketch Mode**: Triggers **Extrude Boss** to create a new solid body or fuse material onto the active base part.
+  - **In 3D Assembly Mode**: Prompts you to pick a plane or starts a sketch on the selected face.
 - **Revolve (`#btn-revolve`)**:
   - **How it works**: Takes the closed sketch profile and rotates it around the vertical axis.
   - **Workflow**: Enter revolution angle in degrees (e.g. `360` for full rotation, `180` for half, `90` for quarter).
   - Produces a smooth rotational solid body that is fully editable in Properties and exportable to STEP.
 - **Box (`[data-primitive="box"]`)**:
-  - Drops a parametric Box (`50 × 50 × 50 mm`) into the scene at an auto-staggered position.
+  - Drops a parametric Box (`50 × 50 × 50 mm`) into the scene with full TNS topological entity tracking (`Face_+X`, `Face_+Z`, etc.).
 - **Cylinder (`[data-primitive="cylinder"]`)**:
   - Drops a parametric Cylinder (`radius: 25 mm`, `height: 60 mm`).
 - **Sphere (`[data-primitive="sphere"]`)**:
@@ -111,26 +110,29 @@ The tab bar beneath the header organizes tools into contextual ribbons:
 - **Cone (`[data-primitive="cone"]`)**:
   - Drops a parametric Cone (`base radius: 25 mm`, `height: 60 mm`).
 - **Sweep (`#btn-sweep`)**:
-  - Extrudes/sweeps a profile along an offset trajectory distance.
+  - **How it works**: Sweeps a closed 2D profile (active sketch or circular pipe) along an arbitrary 3D guide curve / spline trajectory using OpenCascade's `BRepOffsetAPI_MakePipe_1`.
+  - **Presets Available**:
+    1. **90° Elbow Pipe**: Standard industrial curved elbow conduit.
+    2. **S-Curve Conduit**: Smooth dual-bend transition pipe.
+    3. **180° U-Bend Loop**: Full return bend trajectory.
+  - **Custom Sketches**: If launched while in Sketch mode, sweeps the current active closed profile along the chosen 3D trajectory.
 - **Loft (`#btn-loft`)**:
-  - Guided wizard for blending multi-plane sketch profiles into organic solid shapes.
+  - **How it works**: Skins and interpolates a solid body across two or more closed wire cross-sections across offset work planes using OpenCascade's `BRepOffsetAPI_ThruSections`.
+  - **Presets Available**:
+    1. **Circular-to-Square Duct Transition**: Smooth transition from circle ($\varnothing 48\text{ mm}$) to square ($36\times 36\text{ mm}$).
+    2. **De Laval Rocket Nozzle (3 Sections)**: Wide chamber inlet $\rightarrow$ constricted throat constriction $\rightarrow$ expanded bell exhaust.
+    3. **Tapered Rectangular Funnel**: Transition from large $60\times 40\text{ mm}$ rectangle to $24\times 16\text{ mm}$ outlet.
+  - Fully integrated into the parametric Feature Tree with rollback bar support.
 
 ---
 
 ### Modify Panel
 - **Fillet (`#btn-fillet`)**:
-  - **How it works**: Rounds sharp edges of the selected solid body.
-  - **Workflow**:
-    1. Select a solid part in the scene.
-    2. Click **Fillet** → enter fillet radius in mm (default `3 mm`).
-    3. Choose edge filter: `[OK]` for All Edges, `[Cancel]` for Vertical Edges only.
-    4. OpenCascade computes the B-Rep fillet and updates the 3D model.
+  - **Targeted Edge Fillets (TNS)**: In `[╱ Edge]` selection mode, select one or more specific model edges and click **Fillet**. OpenCascade fillets *only* those selected edges, leaving the rest of the solid sharp!
+  - **Global Fallback**: If a whole part is selected, prompts for fillet radius and edge filter (`all` vs. `vertical`).
 - **Chamfer (`#btn-chamfer`)**:
-  - **How it works**: Creates beveled transitional edges.
-  - **Workflow**:
-    1. Select a solid part.
-    2. Click **Chamfer** → enter chamfer distance in mm (default `5 mm`).
-    3. Choose mode: `[OK]` for Vertical Corner Edges (plate corners), `[Cancel]` for All Edges.
+  - **Targeted Edge Chamfers (TNS)**: In `[╱ Edge]` selection mode, select specific model edges and click **Chamfer** to bevel only the selected edges.
+  - **Global Fallback**: If a whole part is selected, prompts for chamfer distance and edge filter.
 - **Hole (`#btn-hole`)**:
   - **How it works**: Cuts a parametric cylindrical hole through the selected solid body.
   - **Workflow**:
@@ -222,41 +224,45 @@ The tab bar beneath the header organizes tools into contextual ribbons:
 ### Draw Panel
 - **Line (`[data-sketch-tool="line"]`)**:
   - Left-click on the sketch plane to place vertices.
-  - Clicking close to the starting point closes the profile and auto-detects horizontal/vertical alignments.
+  - Clicking close to the starting point closes the profile and automatically adds geometric and dimensional constraints.
 - **Rectangle (`[data-sketch-tool="rect"]`)**:
   - Click corner 1, then click corner 2 to generate a 2-point rectangle.
   - Automatically adds 4 geometric constraints (Horizontal/Vertical) and 2 dimensional constraints (Width/Height).
 - **Circle (`[data-sketch-tool="circle"]`)**:
   - Click point 1 for center, click point 2 to define radius.
   - Automatically adds a radial distance constraint.
+- **Project Geometry / Convert Entities (`[data-sketch-tool="project"]` / `#btn-project-geometry`) [Hotkey: `P`]**:
+  - Click any 3D model edge or face in the scene to project its boundary geometry directly onto the active sketch plane.
+  - Projected entities render as **gold dashed reference lines** (`#f59e0b`) with fixed anchor vertices in the solver that new sketch geometry can snap and constrain to.
 
 ---
 
 ### Constrain Panel
+Powered by a **SolveSpace-grade Damped Levenberg-Marquardt Non-Linear Solver**:
+- **Real-Time Solve-on-Drag**: Once a sketch profile is closed, click and drag any vertex to dynamically flex the geometry live while all constraints remain mathematically locked!
+- **Degrees of Freedom (DOF) Counter**: Live HUD pill badge in the viewport computing true mathematical rank:
+  - `○ Under-constrained (N DOF)`: Free dimensions remaining (rendered in SolidWorks electric blue `#38bdf8`).
+  - `✓ Fully Constrained (0 DOF)`: Exactly locked (rendered in dark slate/black `#1e293b`).
+  - `⚠️ Over-constrained (N Conflicts)`: Conflicting constraints flagged (rendered in crimson red `#ef4444`).
+- **Interactive Constraint Glyphs**: Click any on-screen glyph (`H`, `V`, `⊥`, `∥`, `=`, `•`, `🔒`) to inspect its details or delete it.
 - **Dimension (`#btn-constraint-dimension`) [Hotkey: `D`]**:
-  - Displays a list of all active distance dimensions on the profile.
-  - Enter a constraint number and new distance in mm; the 2D numerical constraint solver recalculates all point coordinates and updates the sketch live.
-  - *(Tip: You can also click directly on any blue dimension badge in the viewport to edit it).*
-- **Horizontal (`#btn-constraint-horizontal`) [Hotkey: `H`]**:
-  - Constrains selected sketch segments to horizontal ($V = \text{const}$).
-- **Vertical (`#btn-constraint-vertical`) [Hotkey: `V`]**:
-  - Constrains selected sketch segments to vertical ($U = \text{const}$).
-- **Coincident (`#btn-constraint-coincident`)**:
-  - Locks two points to the same coordinate.
-- **Perpendicular (`#btn-constraint-perpendicular`)**:
-  - Constrains segments to a $90^\circ$ angle.
-- **Parallel (`#btn-constraint-parallel`)**:
-  - Constrains segments to equal slopes.
-- **Equal (`#btn-constraint-equal`)**:
-  - Constrains two lines to equal length.
-- **Fix (`#btn-constraint-fix`)**:
-  - Locks a vertex in place so it acts as an immovable anchor.
+  - Edit any distance or radius dimension live; click directly on any dimension badge in the viewport to change it.
+- **Horizontal (`#btn-constraint-horizontal`) [Hotkey: `H`]**: Constrains selected segments to horizontal ($V = \text{const}$).
+- **Vertical (`#btn-constraint-vertical`) [Hotkey: `V`]**: Constrains selected segments to vertical ($U = \text{const}$).
+- **Coincident (`#btn-constraint-coincident`)**: Locks two points to the same coordinate.
+- **Perpendicular (`#btn-constraint-perpendicular`)**: Constrains segments to a $90^\circ$ angle.
+- **Parallel (`#btn-constraint-parallel`)**: Constrains segments to equal slopes.
+- **Equal (`#btn-constraint-equal`)**: Constrains two lines to equal length.
+- **Fix (`#btn-constraint-fix`)**: Locks a vertex in place as a fixed reference anchor.
 
 ---
 
 ### Exit Panel
-- **Finish & Extrude (`#extrude-btn`)**:
-  - Verifies the sketch is closed, prompts for depth and direction, creates the solid extrusion, and exits sketch mode.
+- **Extrude Boss (`#extrude-btn`)**:
+  - **Standalone**: Creates a new extruded solid body in the assembly.
+  - **On Face**: Fuses new material outward from the face (`BRepAlgoAPI_Fuse`) and appends an `extrude_boss` node to the part's Parametric Feature Tree.
+- **Extrude Cut (`#btn-extrude-cut`)**:
+  - Cuts a pocket into the solid body (`BRepAlgoAPI_Cut`) and appends an `extrude_cut` node to the part's Parametric Feature Tree.
 - **Cancel Sketch (`#cancel-sketch-btn`) [Hotkey: `Esc`]**:
   - Aborts the sketch session without saving and returns to assembly mode.
 
@@ -316,33 +322,38 @@ Located on the right edge of the viewport:
 
 ---
 
-### Document Tabs Bar
+### Document Tabs & Selection Filter Bar
 Located directly above the 3D canvas:
 - **Document Tab**: Displays the active part name (e.g. `Part2`).
 - **`+` (New Part)**: Clean in-memory reset to start a fresh part.
 - **`×` (Close Part)**: Prompts confirmation and resets the document.
+- **Selection Filters Toolbar (`[◫ Part] [▱ Face] [╱ Edge]`)**:
+  - **`[◫ Part]`**: Standard selection mode; selects entire solid bodies and attaches the 3D transform gizmo.
+  - **`[▱ Face]`**: Face selection filter mode; hovers over 3D model faces with a translucent blue highlight. Clicking selects the face, displays its persistent Topological ID (`Face_+Z`), surface area, and normal vector, and enables **Start 2D Sketch** directly on that face!
+  - **`[╱ Edge]`**: Edge selection filter mode; hovers over CAD boundary curves with a glowing cyan line. Clicking selects the edge (Shift+click for multi-selection) for **Targeted Fillet** and **Targeted Chamfer** operations.
+- **Topological Breadcrumb HUD**:
+  - Persistent HUD badge in the top-left of the viewport displaying the active topological path (e.g. `Box_1 / Face_+Z` or `Bracket / Edge_Face_+X__Face_+Z`).
 
 ---
 
-## 8. Left Model Browser Tree
+## 8. Left Model Browser Tree & Parametric History
 
-The Inventor-style hierarchical tree on the left sidebar:
+The Inventor/SolidWorks-style hierarchical tree on the left sidebar:
 - **Filter Search (`🔍` / `#browser-filter-btn`)**:
-  - Click to type a search query (e.g. `Hole` or `Box`).
   - Dynamically filters all solid bodies and feature nodes; leave empty to clear.
 - **Solid Bodies Folder (`📂 Solid Bodies (N)`)**:
   - Shows count of solid parts in the scene.
   - Click `▼`/`▶` to expand or collapse.
-  - Click any solid item to select it in the 3D viewport.
-  - Click `👁` to toggle visibility of that specific solid body on/off.
-- **Origin Folder (`📐 Origin`)**:
-  - Expand to view `YZ Plane`, `XZ Plane`, `XY Plane`, `X Axis`, `Y Axis`, `Z Axis`, and `Center Point`.
-  - Click any item or its `👁` icon to turn on translucent datum planes, dashed axes, or the center point marker in 3D.
-- **Feature History Nodes**:
-  - Displays chronological features (`Extrusion 1`, `Revolve 1`, `Box 1`, `Fillet 1`, `Hole`, etc.).
-  - Shows nested `✎ Sketch1` child node under extrusions.
-- **End of Part Marker (`🛑`)**:
-  - Indicates the bottom of the parametric feature tree.
+  - Click any solid item to select it in the 3D viewport; click `👁` to toggle visibility.
+- **Parametric Feature Tree DAG**:
+  - Every part maintains a complete chronological history graph of operations: `Base Feature` $\rightarrow$ `Extrude Cut` $\rightarrow$ `Fillet` $\rightarrow$ `Extrude Boss` $\rightarrow$ `Loft` $\rightarrow$ `Sweep`.
+  - Expand any part to view its individual feature nodes.
+- **Interactive Rollback Bar (Orange Bar)**:
+  - Drag the horizontal orange rollback bar up and down the feature tree.
+  - OpenCascade sequentially re-evaluates the geometry up to the rollback index, allowing you to inspect past states or insert new features earlier in history!
+- **Feature Suppression & Unsuppression**:
+  - Right-click any feature node or click its suppression toggle to suppress it (`strikethrough` styling).
+  - OpenCascade recomputes the solid skipping the suppressed feature without losing any of its parameters.
 
 ---
 
@@ -354,26 +365,19 @@ When a part is selected, the right sidebar displays editable properties:
   - **Name**: Text input to rename the part live (updates model browser tree immediately).
   - **Color**: Native color picker to change the part's material color in real-time.
 - **Position (mm)**:
-  - Numeric inputs for `X`, `Y`, and `Z`.
-  - Two-way synchronized: updating coordinates moves the part in 3D; moving with the 3D gizmo updates these inputs live.
-- **Dimensions (mm)**:
-  - Automatically adjusts based on part kind:
+  - Numeric inputs for `X`, `Y`, and `Z` with live two-way synchronization with the 3D gizmo.
+- **Dimensions & Parameters**:
+  - Automatically adapts to part type:
     - **Box**: `Width`, `Height`, `Depth`
     - **Cylinder**: `Radius`, `Height`
     - **Sphere**: `Radius`
     - **Cone**: `Radius`, `Height`
-    - **Extrusion**: `Depth` (instantly regenerates 3D extrusion geometry)
-    - **Revolve**: `Angle (°)` (regenerates revolution mesh)
-- **STEP Solid Info**:
-  - Visible when a STEP CAD model is selected; displays ISO standard (`ISO-10303 AP214`), total vertex count, and triangle count.
-- **Boolean CSG Solid Info**:
-  - Visible when a boolean solid is selected; displays the operation (`UNION`, `CUT`, or `INTERSECT`), recursive chainable status (`True (Recursive OCC)`), and mesh triangle count.
-- **Chamfer Feature Info**:
-  - Visible when a chamfered part is selected; displays chamfer distance in mm and edge filter (`all`, `vertical`, `horizontal`).
-- **Fillet Feature Info**:
-  - Visible when a filleted part is selected; displays fillet radius in mm and edge filter (`all`, `vertical`).
-- **Shell Feature Info**:
-  - Visible when a shelled solid is selected; displays wall thickness in mm and shell style (`Open Top` container vs. `Closed Cavity`).
+    - **Extrusion**: `Depth`, Direction
+    - **Sweep**: Spine path, radius, profile
+    - **Loft**: Multi-section profiles and heights
+    - **Revolve**: `Angle (°)`
+- **Topological & B-Rep Inspector**:
+  - Displays selected face or edge properties: persistent TNS ID, surface type (plane, cylinder, cone, bspline), normal vector, centroid, surface area, and adjacent face links.
 
 ---
 
@@ -399,8 +403,9 @@ Opened via **Drawing Sheet** (`#qa-drawing-sheet` or `#btn-drawing-sheet`):
 
 | Shortcut | Action | Scope |
 | :---: | :--- | :--- |
-| **`S`** | Start 2D Sketch | 3D Assembly Mode |
-| **`D`** | Edit Dimensions | 2D Sketch Mode |
+| **`S`** | Start 2D Sketch (on Selected Face or Plane) | 3D Assembly Mode |
+| **`P`** | Project 3D Geometry / Convert Entities | 2D Sketch Mode |
+| **`D`** | Edit Dimensions (Prompt / Live Input) | 2D Sketch Mode |
 | **`H`** | Apply Horizontal Constraint | 2D Sketch Mode |
 | **`V`** | Apply Vertical Constraint | 2D Sketch Mode |
 | **`G`** | Gizmo Move Mode (Translate) | 3D Assembly Mode |
@@ -410,4 +415,5 @@ Opened via **Drawing Sheet** (`#qa-drawing-sheet` or `#btn-drawing-sheet`):
 | **Middle Click + Drag** | Pan Camera | Viewport |
 | **Right Click + Drag** | Orbit Camera | Viewport |
 | **Scroll Wheel** | Zoom In / Out | Viewport |
-| **Shift + Left Click** | Multi-Select Parts | Viewport & Tree |
+| **Shift + Left Click** | Multi-Select Parts or Edges | Viewport & Tree |
+
