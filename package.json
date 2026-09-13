@@ -6,7 +6,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node test-tns.js && node test-feature-tree.js && node test-constraint-solver.js",
+    "test": "node test-tns.js && node test-feature-tree.js && node test-constraint-solver.js && node test-face-sketch.js",
     "dist": "electron-builder",
     "release": "node scripts/release.js"
   },

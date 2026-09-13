@@ -74,23 +74,50 @@ export function createStandardPlane(type = 'XY', offset = 0) {
   );
 }
 
-/** Factory for sketch plane from a planar mesh face hit */
-export function createPlaneFromFace(hit) {
-  const normal = hit.face.normal.clone();
-  hit.object.updateWorldMatrix(true, false);
-  normal.transformDirection(hit.object.matrixWorld).normalize();
+/** Factory for sketch plane from a planar mesh face hit or topological faceRange */
+export function createPlaneFromFace(target, faceRange = null) {
+  let normal, origin, name, part = null, faceId = null;
 
-  const origin = hit.point.clone();
+  if (target && target.object3D && faceRange) {
+    // Called with (part, faceRange)
+    part = target;
+    faceId = faceRange.faceId || faceRange.topoId;
+    part.object3D.updateWorldMatrix(true, false);
+    const worldMatrix = part.object3D.matrixWorld;
 
-  // Pick an arbitrary non-parallel vector to form basis
-  let u = new THREE.Vector3(0, 1, 0);
-  if (Math.abs(normal.dot(u)) > 0.9) {
-    u = new THREE.Vector3(1, 0, 0);
+    const localNormal = new THREE.Vector3(...(faceRange.normal || [0, 1, 0]));
+    normal = localNormal.clone().transformDirection(worldMatrix).normalize();
+
+    const localCentroid = new THREE.Vector3(...(faceRange.centroid || [0, 0, 0]));
+    origin = localCentroid.clone().applyMatrix4(worldMatrix);
+    name = `${part.name || 'Part'} [${faceId}]`;
+  } else if (target && target.face) {
+    // Called with raycast hit
+    const hit = target;
+    normal = hit.face.normal.clone();
+    hit.object.updateWorldMatrix(true, false);
+    normal.transformDirection(hit.object.matrixWorld).normalize();
+    origin = hit.point.clone();
+    name = 'Face Plane';
+  } else {
+    return createStandardPlane('XY', 0);
+  }
+
+  // Choose an intuitive u-axis orthogonal to normal
+  let u = new THREE.Vector3(1, 0, 0);
+  if (Math.abs(normal.dot(u)) > 0.85) {
+    u = new THREE.Vector3(0, 1, 0);
+    if (Math.abs(normal.dot(u)) > 0.85) {
+      u = new THREE.Vector3(0, 0, 1);
+    }
   }
   const v = new THREE.Vector3().crossVectors(normal, u).normalize();
   u.crossVectors(v, normal).normalize();
 
-  return new SketchPlane('Face Plane', origin, u, v, normal);
+  const sp = new SketchPlane(name, origin, u, v, normal);
+  sp.targetPart = part;
+  sp.targetFaceId = faceId;
+  return sp;
 }
 
 function makeDimensionSprite(text) {
@@ -174,6 +201,9 @@ export class SketchSession {
     this.solver = new ConstraintSolver2D();
     this.lastSolveResult = { dof: 0, status: 'under_constrained', conflictingConstraints: [] };
     this.draggedPointId = null;
+    this.targetPart = this.sketchPlane.targetPart || null;
+    this.targetFaceId = this.sketchPlane.targetFaceId || null;
+    this.referenceGeometry = []; // Array of { id, pAId, pBId, start2D, end2D, pts3D, topoId }
 
     this.group = new THREE.Group();
     this.group.name = 'sketch-session-visuals';
@@ -200,12 +230,69 @@ export class SketchSession {
 
   setTool(tool) {
     this.tool = tool;
-    this.points = [];
-    this.closed = false;
-    this.solver.clear();
-    this.lastSolveResult = { dof: 0, status: 'under_constrained', conflictingConstraints: [] };
-    this.draggedPointId = null;
+    if (tool !== 'project' && !this.closed) {
+      this.points = [];
+      this.solver.clear();
+      this.lastSolveResult = { dof: 0, status: 'under_constrained', conflictingConstraints: [] };
+      this.draggedPointId = null;
+      // Re-register reference points into cleared solver
+      for (const ref of this.referenceGeometry) {
+        this.solver.addPoint(ref.pAId, ref.start2D.u, ref.start2D.v, true);
+        this.solver.addPoint(ref.pBId, ref.end2D.u, ref.end2D.v, true);
+      }
+    }
     this._redraw();
+  }
+
+  /**
+   * Projects a 3D model edge onto the active sketch plane ("Convert Entities" / "Project Geometry").
+   * Adds fixed reference endpoints to the constraint solver and stores projected segment.
+   */
+  projectEdge(edgeData, partMatrix = new THREE.Matrix4()) {
+    if (!edgeData || !edgeData.polyline || edgeData.polyline.length < 2) return null;
+    const pts3D = edgeData.polyline.map((p) => new THREE.Vector3(...p).applyMatrix4(partMatrix));
+    const start2D = this.sketchPlane.to2D(pts3D[0]);
+    const end2D = this.sketchPlane.to2D(pts3D[pts3D.length - 1]);
+
+    const idx = this.referenceGeometry.length;
+    const pAId = `ref_${idx}_A`;
+    const pBId = `ref_${idx}_B`;
+
+    this.solver.addPoint(pAId, start2D.u, start2D.v, true);
+    this.solver.addPoint(pBId, end2D.u, end2D.v, true);
+
+    const refItem = {
+      id: `ref_edge_${idx}`,
+      pAId,
+      pBId,
+      start2D,
+      end2D,
+      pts3D,
+      topoId: edgeData.topoId
+    };
+
+    this.referenceGeometry.push(refItem);
+    this._redraw();
+    return refItem;
+  }
+
+  /**
+   * Projects all perimeter boundary edges of a 3D face into the active sketch plane.
+   */
+  projectFace(faceRange, part) {
+    if (!part || !part.topology || !part.topology.edges) return [];
+    part.object3D.updateWorldMatrix(true, false);
+    const partMatrix = part.object3D.matrixWorld;
+    const faceId = faceRange.faceId || faceRange.topoId;
+    const adjEdges = part.topology.edges.filter(
+      (e) => e.adjacentFaceIds && e.adjacentFaceIds.includes(faceId)
+    );
+    const projected = [];
+    for (const edge of adjEdges) {
+      const item = this.projectEdge(edge, partMatrix);
+      if (item) projected.push(item);
+    }
+    return projected;
   }
 
   /** Project raycaster to sketch plane */
@@ -472,6 +559,34 @@ export class SketchSession {
       c.geometry?.dispose();
       c.material?.dispose();
     }
+
+    // Render projected reference geometry (Inventor/SolidWorks gold dashed lines)
+    if (this.referenceGeometry && this.referenceGeometry.length > 0) {
+      for (const ref of this.referenceGeometry) {
+        const geo = new THREE.BufferGeometry().setFromPoints(ref.pts3D);
+        const mat = new THREE.LineDashedMaterial({
+          color: 0xf59e0b,
+          dashSize: 3,
+          gapSize: 2,
+          linewidth: 2.2
+        });
+        const refLine = new THREE.Line(geo, mat);
+        refLine.computeLineDistances();
+        refLine.userData = { isReferenceGeometry: true, refItem: ref };
+        this.group.add(refLine);
+
+        // Reference end points
+        const refDotGeo = new THREE.SphereGeometry(1.6, 8, 8);
+        const refDotMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+        for (const pt3D of [ref.pts3D[0], ref.pts3D[ref.pts3D.length - 1]]) {
+          const dot = new THREE.Mesh(refDotGeo, refDotMat);
+          dot.position.copy(pt3D);
+          dot.userData = { isReferenceVertex: true, refItem: ref };
+          this.group.add(dot);
+        }
+      }
+    }
+
     if (this.points.length === 0) return;
 
     // SolidWorks-style color coding based on constraint status

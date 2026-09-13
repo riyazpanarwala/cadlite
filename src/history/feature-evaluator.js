@@ -87,6 +87,30 @@ export async function recomputePart(part) {
           openFace: feat.params.openFace !== false
         }
       };
+    } else if (feat.type === 'extrude_boss') {
+      currentShapeDef = {
+        kind: 'extrude_boss',
+        params: {
+          basePart: currentShapeDef,
+          points2D: feat.params.points2D,
+          depth: feat.params.depth || 20,
+          direction: 'boss',
+          planeMatrix: feat.params.planeMatrix,
+          targetFaceId: feat.params.targetFaceId
+        }
+      };
+    } else if (feat.type === 'extrude_cut') {
+      currentShapeDef = {
+        kind: 'extrude_cut',
+        params: {
+          basePart: currentShapeDef,
+          points2D: feat.params.points2D,
+          depth: feat.params.depth || 20,
+          direction: 'cut',
+          planeMatrix: feat.params.planeMatrix,
+          targetFaceId: feat.params.targetFaceId
+        }
+      };
     } else if (feat.type === 'hole') {
       const dia = feat.params.diameter || 12;
       const depth = feat.params.depth || 200;

@@ -6,7 +6,7 @@ import { Assembly } from './assembly/Assembly.js';
 import { Part } from './assembly/Part.js';
 import { MateSolver } from './assembly/mate-solver.js';
 import { createPrimitivePart, rebuildPrimitiveGeometry } from './geometry/primitives.js';
-import { SketchSession } from './geometry/sketch.js';
+import { SketchSession, createPlaneFromFace } from './geometry/sketch.js';
 import { extrudeSketch, rebuildExtrudeGeometry } from './geometry/extrude.js';
 import { revolveSketch, rebuildRevolveGeometry } from './geometry/revolve.js';
 import { createRectangularPattern, createCircularPattern, createMirrorPart, clonePart } from './geometry/pattern.js';
@@ -235,6 +235,13 @@ document.querySelectorAll('[data-primitive]').forEach((btn) => {
 // ---------------------------------------------------------------------
 
 function promptSketchPlane() {
+  if (selection.filterMode === 'face') {
+    const face = selection.primaryFace();
+    if (face) {
+      return createPlaneFromFace(face.part, face.faceRange);
+    }
+  }
+
   const choice = window.prompt(
     "Start 2D Sketch - Select Work Plane:\n\n" +
     "1: XY Plane (Front View)\n" +
@@ -250,10 +257,21 @@ function promptSketchPlane() {
   return 'XZ';
 }
 
-document.getElementById('btn-start-sketch')?.addEventListener('click', () => {
-  const plane = promptSketchPlane();
+function startSketchAction() {
+  let plane = null;
+  if (selection.filterMode === 'face') {
+    const face = selection.primaryFace();
+    if (face) {
+      plane = createPlaneFromFace(face.part, face.faceRange);
+    }
+  }
+  if (!plane) {
+    plane = promptSketchPlane();
+  }
   if (plane) setMode('sketch', plane);
-});
+}
+
+document.getElementById('btn-start-sketch')?.addEventListener('click', startSketchAction);
 
 document.getElementById('cancel-sketch-btn')?.addEventListener('click', () => setMode('assembly'));
 
@@ -272,8 +290,21 @@ function setMode(newMode, planeType = null) {
     if (chosenPlane === 'XY') viewcube.setView('FRONT');
     else if (chosenPlane === 'XZ') viewcube.setView('TOP');
     else if (chosenPlane === 'YZ') viewcube.setView('RIGHT');
+    else if (activeSketch && activeSketch.sketchPlane && activeSketch.sketchPlane.normal) {
+      // Normal alignment to custom 3D face plane (Inventor/SolidWorks "Normal To")
+      const normal = activeSketch.sketchPlane.normal.clone().normalize();
+      const origin = activeSketch.sketchPlane.origin;
+      const dist = 180;
+      const targetPos = origin.clone();
+      const camPos = targetPos.clone().add(normal.clone().multiplyScalar(dist));
+      viewport.camera.position.copy(camPos);
+      viewport.controls.target.copy(targetPos);
+      viewport.camera.up.copy(activeSketch.sketchPlane.vAxis);
+      viewport.camera.lookAt(targetPos);
+      viewport.controls.update();
+    }
 
-    viewportHint.textContent = `Sketching on ${activeSketch.sketchPlane.name}. Click points to draw; click back near start to close.`;
+    viewportHint.textContent = `Sketching on ${activeSketch.sketchPlane.name}. Click points to draw, 'P' to project 3D edges/faces, click back near start to close.`;
     setStatus(`Active sketch plane: ${activeSketch.sketchPlane.name}`);
   } else {
     activateRibbonTab('model');
@@ -297,7 +328,7 @@ function setSketchTool(tool) {
   if (activeSketch) activeSketch.setTool(tool);
 }
 
-function handleExtrudeAction() {
+async function handleExtrudeAction() {
   if (!activeSketch || !activeSketch.isComplete()) {
     setStatus('Sketch is not a closed profile yet. Start a sketch and draw a closed profile first.');
     return;
@@ -305,6 +336,33 @@ function handleExtrudeAction() {
   const depthStr = window.prompt('Extrude Solid Feature:\n\nExtrude depth (mm):', '20');
   const depth = parseFloat(depthStr);
   if (!depthStr || isNaN(depth) || depth <= 0) return;
+
+  if (activeSketch.targetPart) {
+    const targetPart = activeSketch.targetPart;
+    const points2D = activeSketch.toPoints2D();
+    const planeMatrix = Array.from(activeSketch.sketchPlane.getMatrix().elements);
+
+    targetPart.featureTree.addFeature({
+      name: `Extrude Boss ${targetPart.featureTree.features.length}`,
+      type: 'extrude_boss',
+      params: {
+        points2D,
+        depth,
+        direction: 'boss',
+        planeMatrix,
+        targetFaceId: activeSketch.targetFaceId
+      }
+    });
+
+    setStatus(`Extruding boss on "${targetPart.name}"...`);
+    await recomputePart(targetPart);
+    setMode('assembly');
+    selection.select(targetPart);
+    treePanel.render();
+    propertiesPanel.render();
+    setStatus(`Extruded Boss (${depth}mm) on "${targetPart.name}"`);
+    return;
+  }
 
   const dirChoice = window.confirm(
     `Extrude Direction:\n\nClick [OK] for Normal Extrusion\nClick [Cancel] for Symmetric Extrusion`
@@ -320,13 +378,54 @@ function handleExtrudeAction() {
   setStatus(`Extruded profile (${depth}mm, ${direction})`);
 }
 
+async function handleExtrudeCutAction() {
+  if (!activeSketch || !activeSketch.isComplete()) {
+    setStatus('Sketch is not a closed profile yet. Start a sketch and draw a closed profile first.');
+    alert('Extrude Cut requires a closed sketch profile. Draw a closed shape in Sketch mode first.');
+    return;
+  }
+  const targetPart = activeSketch.targetPart || selection.primary();
+  if (!targetPart || !targetPart.featureTree) {
+    setStatus('Extrude Cut requires an existing solid part to cut into.');
+    alert('Extrude Cut requires an existing solid part to cut into. Select a part or sketch directly on a part face.');
+    return;
+  }
+
+  const depthStr = window.prompt(`Extrude Cut (Pocket) Feature on "${targetPart.name}":\n\nCut depth into solid (mm):`, '10');
+  const depth = parseFloat(depthStr);
+  if (!depthStr || isNaN(depth) || depth <= 0) return;
+
+  const points2D = activeSketch.toPoints2D();
+  const planeMatrix = Array.from(activeSketch.sketchPlane.getMatrix().elements);
+
+  targetPart.featureTree.addFeature({
+    name: `Extrude Cut ${targetPart.featureTree.features.length}`,
+    type: 'extrude_cut',
+    params: {
+      points2D,
+      depth,
+      direction: 'cut',
+      planeMatrix,
+      targetFaceId: activeSketch.targetFaceId
+    }
+  });
+
+  setStatus(`Cutting pocket into "${targetPart.name}"...`);
+  await recomputePart(targetPart);
+  setMode('assembly');
+  selection.select(targetPart);
+  treePanel.render();
+  propertiesPanel.render();
+  setStatus(`Cut pocket (${depth}mm) into "${targetPart.name}"`);
+}
+
 document.getElementById('extrude-btn')?.addEventListener('click', handleExtrudeAction);
+document.getElementById('btn-extrude-cut')?.addEventListener('click', handleExtrudeCutAction);
 document.getElementById('btn-extrude')?.addEventListener('click', () => {
   if (mode === 'sketch') {
     handleExtrudeAction();
   } else {
-    const plane = promptSketchPlane();
-    if (plane) setMode('sketch', plane);
+    startSketchAction();
   }
 });
 
@@ -496,6 +595,37 @@ canvas.addEventListener('pointerdown', (event) => {
 
   if (mode === 'sketch') {
     const raycaster = viewport.raycasterFromEvent(event);
+
+    // 0. Project Geometry / Convert Entities tool
+    if (activeSketch.tool === 'project') {
+      raycaster.params.Line = { threshold: 6 };
+      const modelHits = raycaster.intersectObjects(assembly.root.object3D.children, true);
+      const edgeHit = modelHits.find((h) => h.object.userData && h.object.userData.isCadEdge);
+      if (edgeHit && edgeHit.object.userData.edgeData) {
+        const part = assembly.findByObject3D(edgeHit.object.parent);
+        if (part) {
+          part.object3D.updateWorldMatrix(true, false);
+          activeSketch.projectEdge(edgeHit.object.userData.edgeData, part.object3D.matrixWorld);
+          updateSketchDOFBadge();
+          setStatus(`Projected edge [${edgeHit.object.userData.edgeData.topoId}] into sketch`);
+          return;
+        }
+      }
+      const faceHit = modelHits.find((h) => h.object.isMesh && h.faceIndex !== undefined && !h.object.userData.isOverlay);
+      if (faceHit) {
+        const part = assembly.findByObject3D(faceHit.object);
+        if (part) {
+          const faceRange = part.getFaceByTriangleIndex(faceHit.faceIndex);
+          if (faceRange) {
+            const projected = activeSketch.projectFace(faceRange, part);
+            updateSketchDOFBadge();
+            setStatus(`Projected ${projected.length} boundary edges of face [${faceRange.topoId || faceRange.faceId}]`);
+            return;
+          }
+        }
+      }
+      return;
+    }
 
     // 1. Check if user clicked on an interactive dimension badge!
     const badgeHits = raycaster.intersectObjects(activeSketch.group.children, true);
@@ -695,9 +825,12 @@ document.getElementById('btn-constraint-fix')?.addEventListener('click', () => {
 window.addEventListener('keydown', (event) => {
   if (event.key === 's' || event.key === 'S') {
     if (mode === 'assembly' && document.activeElement.tagName !== 'INPUT') {
-      const plane = promptSketchPlane();
-      if (plane) setMode('sketch', plane);
+      startSketchAction();
     }
+  }
+  if ((event.key === 'p' || event.key === 'P') && mode === 'sketch' && document.activeElement.tagName !== 'INPUT') {
+    setSketchTool('project');
+    setStatus('Active tool: Project Geometry (Convert Entities). Click 3D edges or faces to project.');
   }
   if ((event.key === 'd' || event.key === 'D') && mode === 'sketch' && document.activeElement.tagName !== 'INPUT') {
     promptEditActiveDimension();

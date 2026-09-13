@@ -320,6 +320,9 @@
             <button class="ribbon-btn compact" data-sketch-tool="circle" title="Draw Center-Point Circle">
               <span class="compact-icon">○</span> Circle
             </button>
+            <button class="ribbon-btn compact" data-sketch-tool="project" id="btn-project-geometry" title="Project 3D Geometry / Convert Entities (P)">
+              <span class="compact-icon">⇲</span> Project
+            </button>
           </div>
           <footer class="panel-caption">Draw</footer>
         </section>
@@ -372,7 +375,7 @@
 
         <section class="ribbon-panel">
           <div class="panel-tools">
-            <button class="ribbon-btn hero accent" id="extrude-btn" title="Finish Sketch and Extrude profile">
+            <button class="ribbon-btn hero accent" id="extrude-btn" title="Finish Sketch and Extrude Boss / Join">
               <div class="btn-icon">
                 <svg viewBox="0 0 32 32" width="28" height="28">
                   <polygon points="16,4 28,11 16,18 4,11" fill="#ffb020"/>
@@ -380,7 +383,16 @@
                   <polygon points="28,11 16,18 16,28 28,21" fill="#a05d05"/>
                 </svg>
               </div>
-              <span class="btn-label">Finish &<br/>Extrude</span>
+              <span class="btn-label">Extrude<br/>Boss</span>
+            </button>
+            <button class="ribbon-btn hero" id="btn-extrude-cut" title="Finish Sketch and Cut into 3D Solid (Pocket)">
+              <div class="btn-icon">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                  <polygon points="16,4 28,11 16,18 4,11" fill="#ef4444" opacity="0.6"/>
+                  <path d="M16 8v16m-6-6l6 6 6-6" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                </svg>
+              </div>
+              <span class="btn-label">Extrude<br/>Cut</span>
             </button>
             <button class="ribbon-btn hero" id="cancel-sketch-btn" title="Cancel Sketch">
               <div class="btn-icon">

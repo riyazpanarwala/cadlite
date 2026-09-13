@@ -80,7 +80,7 @@ function centerZAndMapToY(oc, shape, height) {
 }
 
 function makeExtrudeShape(oc, params) {
-  const { points2D, planeZ, depth } = params;
+  const { points2D, planeZ, depth = 20, direction = 'normal', planeMatrix } = params;
 
   const polygon = new oc.BRepBuilderAPI_MakePolygon_1();
   for (const [x, y] of points2D) {
@@ -90,12 +90,47 @@ function makeExtrudeShape(oc, params) {
   const wire = polygon.Wire();
   const face = new oc.BRepBuilderAPI_MakeFace_15(wire, false).Face();
 
-  const prismVec = new oc.gp_Vec_4(0, 0, depth);
-  const solid = new oc.BRepPrimAPI_MakePrism_1(face, prismVec, false, true).Shape();
+  // Direction handling:
+  // 'cut' or 'flip' extrudes into -Z (inward into the face)
+  // 'boss' or 'normal' extrudes along +Z (outward from the face)
+  // 'symmetric' extrudes from -depth/2 to +depth/2
+  let extrudeZ = depth;
+  let offsetZ = 0;
+  if (direction === 'cut' || direction === 'flip') {
+    extrudeZ = -depth;
+  } else if (direction === 'symmetric') {
+    extrudeZ = depth;
+    offsetZ = -depth / 2;
+  }
 
-  const trsf = new oc.gp_Trsf_1();
-  trsf.SetTranslation_1(new oc.gp_Vec_4(0, 0, planeZ || 0));
-  return new oc.BRepBuilderAPI_Transform_2(solid, trsf, true).Shape();
+  const prismVec = new oc.gp_Vec_4(0, 0, extrudeZ);
+  let solid = new oc.BRepPrimAPI_MakePrism_1(face, prismVec, false, true).Shape();
+
+  if (offsetZ !== 0) {
+    const symTrsf = new oc.gp_Trsf_1();
+    symTrsf.SetTranslation_1(new oc.gp_Vec_4(0, 0, offsetZ));
+    solid = new oc.BRepBuilderAPI_Transform_2(solid, symTrsf, true).Shape();
+  }
+
+  // If a 4x4 planeMatrix is provided (arbitrary 3D face plane), apply it!
+  if (Array.isArray(planeMatrix) && planeMatrix.length === 16) {
+    const m = planeMatrix; // Three.js column-major 16-length array
+    const trsf = new oc.gp_Trsf_1();
+    trsf.SetValues(
+      m[0], m[4], m[8], m[12],
+      m[1], m[5], m[9], m[13],
+      m[2], m[6], m[10], m[14]
+    );
+    return new oc.BRepBuilderAPI_Transform_2(solid, trsf, true).Shape();
+  }
+
+  if (planeZ) {
+    const trsf = new oc.gp_Trsf_1();
+    trsf.SetTranslation_1(new oc.gp_Vec_4(0, 0, planeZ));
+    return new oc.BRepBuilderAPI_Transform_2(solid, trsf, true).Shape();
+  }
+
+  return solid;
 }
 
 function makeRevolShape(oc, params) {
@@ -260,6 +295,22 @@ function buildShape(oc, def) {
     case 'shell': {
       const base = buildShape(oc, def.params.basePart);
       shape = applyShellToShape(oc, base, def.params.thickness || 2, def.params.openFace !== false);
+      break;
+    }
+    case 'extrude_boss': {
+      const base = buildShape(oc, def.params.basePart);
+      const prism = makeExtrudeShape(oc, { ...def.params, direction: 'boss' });
+      const fuse = new oc.BRepAlgoAPI_Fuse_3(base, prism, new oc.Message_ProgressRange_1());
+      fuse.Build(new oc.Message_ProgressRange_1());
+      shape = fuse.Shape();
+      break;
+    }
+    case 'extrude_cut': {
+      const base = buildShape(oc, def.params.basePart);
+      const prism = makeExtrudeShape(oc, { ...def.params, direction: 'cut' });
+      const cut = new oc.BRepAlgoAPI_Cut_3(base, prism, new oc.Message_ProgressRange_1());
+      cut.Build(new oc.Message_ProgressRange_1());
+      shape = cut.Shape();
       break;
     }
     case 'boolean': {
