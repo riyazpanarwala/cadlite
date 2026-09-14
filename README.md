@@ -18,12 +18,19 @@ to prevent the transform gizmo from moving parts while selecting them.
 The assembly-aware importer preserves component hierarchy, placements, and
 component names/colors when available. Each leaf stores its own exact STEP
 geometry for independent export and project saving. Geometry is imported in mm.
-Per-face colors and PMI are not currently imported. Section cuts are uncapped;
-exploded views, annotations, and large-assembly performance qualification remain
+Per-face colors and PMI are not currently imported. Section cuts include a
+**Fill cuts** toggle (enabled by default), with amber caps that preserve holes.
+Caps are based on the display mesh, follow component placement and visibility,
+and are excluded from selection, measurements, saved geometry, and exports.
+Wireframe mode leaves cuts unfilled. Open or non-manifold contours may not cap.
+Exploded views, annotations, and large-assembly performance qualification remain
 future work. This is not full eDrawings feature parity.
 
 Run `npm run test:viewer` for background import, component separation, dimensions,
-save/reopen, failed-load preservation, and hidden/clipped selection regression checks.
+save/reopen, failed-load preservation, hidden/clipped selection, and filled-section
+regression checks (including hollow sections and transformed components).
+Run `npm run test:viewer:ui` for a hidden Electron test of import, cap rendering,
+and the Fill cuts toggle in the actual application interface.
 
 ```bash
 cd cadlite

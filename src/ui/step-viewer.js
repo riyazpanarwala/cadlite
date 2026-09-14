@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Part } from '../assembly/Part.js';
+import { SectionCaps } from '../core/section-caps.js';
 
 export function buildImportedTree(data) {
   if (!data || !Array.isArray(data.children) && data.type === 'assembly') throw new Error('Invalid STEP component tree.');
@@ -26,6 +27,7 @@ export function isVisibleHit(hit, plane = null) {
 }
 
 export function installStepViewer({ viewport, assembly, selection, refresh, open, measure, status, setInspection }) {
+  const caps = new SectionCaps(viewport, assembly);
   const bar = document.createElement('div');
   bar.id = 'step-viewer-toolbar';
   bar.innerHTML = `<strong>STEP Viewer</strong>
@@ -35,6 +37,7 @@ export function installStepViewer({ viewport, assembly, selection, refresh, open
     <label>Display <select aria-label="Display mode"><option value="edges">Shaded + edges</option><option value="shaded">Shaded</option><option value="wire">Wireframe</option><option value="transparent">Transparent</option></select></label>
     <label>Section <select aria-label="Section plane"><option value="off">Off</option><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></select></label>
     <input aria-label="Section position" type="range" min="0" max="100" value="50" disabled><button data-action="flip" disabled>Flip</button>
+    <label><input type="checkbox" checked aria-label="Fill section cuts"> Fill cuts</label>
     <label><input type="checkbox" checked aria-label="Inspection mode"> Inspect only</label>`;
   document.getElementById('workspace').before(bar);
   const display = bar.querySelector('[aria-label="Display mode"]');
@@ -52,7 +55,7 @@ export function installStepViewer({ viewport, assembly, selection, refresh, open
       const normal = new THREE.Vector3(); normal[axis] = sign;
       const coordinate = THREE.MathUtils.lerp(bounds.min[axis], bounds.max[axis], Number(slider.value) / 100);
       viewport.sectionPlane = new THREE.Plane(normal, -sign * coordinate);
-      slider.title = `${coordinate.toFixed(2)} mm (open section, no cap)`;
+      slider.title = `${coordinate.toFixed(2)} mm`;
     }
     const planes = viewport.sectionPlane ? [viewport.sectionPlane] : [];
     // Apply clipping to selection/measurement overlays too, without clipping the grid.
@@ -74,6 +77,7 @@ export function installStepViewer({ viewport, assembly, selection, refresh, open
       if (part.edgeGroup) part.edgeGroup.visible = display.value === 'edges';
     }
     selection.clearSubSelections();
+    caps.enabled = bar.querySelector('[aria-label="Fill section cuts"]').checked && display.value !== 'wire';
   };
   bar.addEventListener('click', event => {
     const action = event.target.dataset.action;
@@ -98,9 +102,10 @@ export function installStepViewer({ viewport, assembly, selection, refresh, open
     selection.clear(); refresh();
   });
   display.addEventListener('change', apply);
-  section.addEventListener('change', () => { apply(); status(section.value === 'off' ? 'Section disabled' : 'Section cut enabled; cut surfaces are open (uncapped).'); });
+  section.addEventListener('change', () => { apply(); status(section.value === 'off' ? 'Section disabled' : 'Section enabled. Fill cuts closes sliced solid display meshes; holes remain open.'); });
   slider.addEventListener('input', apply);
-  bar.querySelector('[type="checkbox"]').addEventListener('change', event => setInspection(event.target.checked));
+  bar.querySelector('[aria-label="Fill section cuts"]').addEventListener('change', apply);
+  bar.querySelector('[aria-label="Inspection mode"]').addEventListener('change', event => setInspection(event.target.checked));
   return { apply, busy(value) {
     bar.querySelector('[data-action="open"]').disabled = value;
     bar.querySelector('[data-action="cancel"]').hidden = !value;
