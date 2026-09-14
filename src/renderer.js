@@ -150,6 +150,7 @@ function updateDocName(name) {
 function resetScene(newDocName = 'Part1') {
   stepViewer.resetExplode();
   assembly.clear();
+  stepViewer.reloadProject();
   mateSolver.records = [];
   selection.clear();
   gizmo.detach();
@@ -1554,7 +1555,7 @@ async function handleLoadProject() {
   gizmo.detach();
   try {
     deserializeProject(assembly, result.contents, mateSolver);
-    stepViewer.apply();
+    stepViewer.reloadProject();
     viewport.zoomAll(assembly.root.object3D);
   } catch (error) {
     setStatus(`Cannot open project: ${error.message}`);
@@ -1943,7 +1944,8 @@ function setStatus(msg) {
 const stepViewer = installStepViewer({ viewport, assembly, selection, refresh: () => { treePanel.render(); propertiesPanel.render(); },
   open: handleImportStep, measure: toggleMeasureTool, status: setStatus,
   setInspection: value => { inspectionMode = value; updateGizmoAttachment(); },
-  onExplode: () => { measureTool.deactivate(); updateMeasureButtonsState(false); gizmo.detach(); }
+  onExplode: () => { measureTool.deactivate(); updateMeasureButtonsState(false); gizmo.detach(); },
+  onReviewRestore: () => { viewcube.animating = false; measureTool.deactivate(); updateMeasureButtonsState(false); gizmo.detach(); }
 });
 window.cadlite.onStepProgress?.(setStatus);
 activateRibbonTab('view');

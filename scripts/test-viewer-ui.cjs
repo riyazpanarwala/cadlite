@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 app.whenReady().then(async () => {
   let window;
-  const timeout = setTimeout(() => { console.error('Viewer UI test timed out'); app.exit(1); }, 30000);
+  const timeout = setTimeout(() => { console.error('Viewer UI test timed out'); app.exit(1); }, 45000);
   try {
     const THREE = await import('three');
     const outline = new THREE.Shape();
@@ -20,6 +20,7 @@ app.whenReady().then(async () => {
       {type:'assembly',name:'Nested part',matrix:new THREE.Matrix4().makeTranslation(100,0,0).toArray(),children:[{...fixturePart,name:'Second hollow part'}]}]}}));
     let savedProject;
     ipcMain.handle('project:save', (_event,json) => { savedProject=JSON.parse(json);return {ok:true,filePath:'viewer-test.cadlite.json'}; });
+    ipcMain.handle('project:load', () => ({ok:true,filePath:'viewer-test.cadlite.json',contents:JSON.stringify(savedProject)}));
     window = new BrowserWindow({show:false,width:1400,height:950,webPreferences:{preload:path.join(__dirname,'..','preload.js'),contextIsolation:true,nodeIntegration:false,backgroundThrottling:false}});
     const errors=[];
     window.webContents.on('console-message',(_event,level,message)=>{if(level===3){errors.push(message);console.error(message);}});
@@ -84,8 +85,45 @@ app.whenReady().then(async () => {
       document.querySelector('[data-action="reset-explode"]').click();
     `);
     assert.equal(await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Explode percentage"]').textContent`),'0%');
+    await window.webContents.executeJavaScript(`{
+      const select=document.querySelector('[aria-label="Section plane"]');select.value='x';select.dispatchEvent(new Event('change'));
+      const position=document.querySelector('[aria-label="Section position"]');position.value='31';position.dispatchEvent(new Event('input'));
+      const explode=document.querySelector('[aria-label="Explode amount"]');explode.value='40';explode.dispatchEvent(new Event('input'));
+      const part=[...document.querySelectorAll('.tree-node .label')].find(label=>label.textContent==='Hollow part');part.click();
+      document.querySelector('[data-action="hide"]').click();
+      document.querySelector('[aria-label="Review view name"]').value='Internal review';
+      document.querySelector('[data-review="save"]').click();
+      document.getElementById('qa-save').click();
+    }`);
+    await frames();
+    const savedView=structuredClone(savedProject.reviewViews[0]);
+    assert.equal(savedView.name,'Internal review');assert.equal(savedView.settings.explodeAmount,40);
+    assert.ok(savedView.visibility.some(item=>!item.visible));
+    await window.webContents.executeJavaScript(`document.getElementById('qa-open').click();`);
+    await frames();
+    assert.equal(await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Saved review views"]').selectedOptions[0].textContent`),'Internal review');
+    await window.webContents.executeJavaScript(`
+      document.getElementById('view-front').click();
+      document.querySelector('[data-action="show"]').click();
+      document.querySelector('[data-review="restore"]').click();
+    `);
+    await frames();
+    assert.equal(await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Section plane"]').value`),'x');
+    assert.equal(await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Section position"]').value`),'31');
+    assert.equal(await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Explode amount"]').value`),'40');
+    await window.webContents.executeJavaScript(`
+      document.querySelector('[aria-label="Review view name"]').value='Recalled snapshot';
+      document.querySelector('[data-review="save"]').click();
+      document.getElementById('qa-save').click();
+    `);
+    await frames();
+    const recalled=savedProject.reviewViews[1];
+    assert.deepEqual(recalled.settings,savedView.settings);assert.deepEqual(recalled.visibility,savedView.visibility);
+    for(const key of ['position','target','up']) recalled.camera[key].forEach((value,i)=>assert.ok(Math.abs(value-savedView.camera[key][i])<1e-5,'Recalled camera must match the snapshot'));
+    await window.webContents.executeJavaScript(`document.querySelector('[data-review="delete"]').click();`);
+    assert.equal(await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Saved review views"]').options.length`),1);
     assert.equal(errors.length,0,errors.join('\n'));
-    console.log(`Viewer UI passed: import, filled cuts (${filled-open} cap pixels), explode (${changed} changed pixels), reset, and assembled-position saving.`);
+    console.log(`Viewer UI passed: import, filled cuts, explosion/reset, assembled-position saving, and saved-view project reopening, recall, camera/visibility restoration, and deletion.`);
     clearTimeout(timeout);window.destroy();app.exit(0);
   } catch(error) {clearTimeout(timeout);console.error(error);if(window)window.destroy();app.exit(1);}
 });

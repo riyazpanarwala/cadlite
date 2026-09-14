@@ -9,7 +9,7 @@
     "test": "node test-measure-engine.js && node test-step-measurement.js && node test-tns.js && node test-feature-tree.js && node test-constraint-solver.js && node test-face-sketch.js && node test-sweep-loft.js",
     "dist": "electron-builder",
     "release": "node scripts/release.js",
-    "test:viewer": "node test-step-viewer.js && node test-section-caps.js && node test-exploded-view.js",
+    "test:viewer": "node test-step-viewer.js && node test-section-caps.js && node test-exploded-view.js && node test-review-views.js",
     "test:viewer:ui": "electron scripts/test-viewer-ui.cjs"
   },
   "author": "Riyaz",

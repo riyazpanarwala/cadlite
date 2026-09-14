@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Part } from '../assembly/Part.js';
 import { SectionCaps } from '../core/section-caps.js';
 import { ExplodedView } from '../core/exploded-view.js';
+import { installReviewViews } from './review-views.js';
 
 export function buildImportedTree(data) {
   if (!data || !Array.isArray(data.children) && data.type === 'assembly') throw new Error('Invalid STEP component tree.');
@@ -27,7 +28,7 @@ export function isVisibleHit(hit, plane = null) {
   return !plane || plane.distanceToPoint(hit.point) >= -1e-6;
 }
 
-export function installStepViewer({ viewport, assembly, selection, refresh, open, measure, status, setInspection, onExplode }) {
+export function installStepViewer({ viewport, assembly, selection, refresh, open, measure, status, setInspection, onExplode, onReviewRestore }) {
   const caps = new SectionCaps(viewport, assembly);
   const explode = new ExplodedView(assembly);
   const bar = document.createElement('div');
@@ -106,6 +107,18 @@ export function installStepViewer({ viewport, assembly, selection, refresh, open
     selection.clearSubSelections(); apply(); refresh();
     status('Exploded inspection preview. Reset assembly restores positions; measuring, editing, saving, or exporting also resets it.');
   };
+  const reviews = installReviewViews({ parent:bar, viewport, assembly, selection, refresh, status,
+    getSettings: () => ({ display:display.value, section:section.value, sectionPosition:Number(slider.value), sectionSign:sign,
+      fillCuts:bar.querySelector('[aria-label="Fill section cuts"]').checked, explodeAxis:explodeAxis.value, explodeAmount:explode.amount }),
+    beforeRestore: () => { resetExplode(); onReviewRestore?.(); },
+    setSettings: settings => {
+      display.value = settings.display; section.value = settings.section; slider.value = String(settings.sectionPosition); sign = settings.sectionSign;
+      bar.querySelector('[aria-label="Fill section cuts"]').checked = settings.fillCuts;
+      explodeAxis.value = settings.explodeAxis; explodeSlider.value = String(settings.explodeAmount);
+      bar.querySelector('[aria-label="Inspection mode"]').checked = true; setInspection(true);
+      if (settings.explodeAmount) updateExplode(); else apply();
+    }
+  });
   bar.addEventListener('click', event => {
     const action = event.target.dataset.action;
     if (!action) return;
@@ -144,10 +157,15 @@ export function installStepViewer({ viewport, assembly, selection, refresh, open
   }, true);
   document.addEventListener('focusin', event => { if (event.target.closest?.('#properties-panel')) resetExplode(); }, true);
   window.addEventListener('keydown', event => {
-    if (!explode.active) return;
+    if (!explode.active || event.target.closest?.('.review-views')) return;
     if (event.key === 'Escape' || event.key === 'Delete' || /^[sgrxmdp]$/i.test(event.key) || event.ctrlKey || event.metaKey) resetExplode();
   }, true);
-  return { apply, resetExplode, busy(value) {
+  return { apply, resetExplode, reloadProject() {
+    resetExplode(); display.value = 'edges'; section.value = 'off'; slider.value = '50'; sign = 1;
+    bar.querySelector('[aria-label="Fill section cuts"]').checked = true;
+    explodeAxis.value = 'radial'; explodeSlider.value = '0'; explodeOutput.textContent = '0%';
+    reviews.reload(); apply();
+  }, busy(value) {
     bar.querySelector('[data-action="open"]').disabled = value;
     bar.querySelector('[data-action="cancel"]').hidden = !value;
   } };

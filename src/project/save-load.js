@@ -3,6 +3,7 @@ import { Part, reservePartId } from '../assembly/Part.js';
 import { geometryForPrimitive, buildPrimitiveTopology } from '../geometry/primitives.js';
 import { buildExtrudeGeometry, buildExtrudeTopology } from '../geometry/extrude.js';
 import { buildRevolveGeometry } from '../geometry/revolve.js';
+import { normalizeReviewViews } from './review-views.js';
 
 const FORMAT_VERSION = 1;
 
@@ -12,6 +13,7 @@ export function serializeProject(assembly, mateSolver) {
       formatVersion: FORMAT_VERSION,
       savedAt: new Date().toISOString(),
       tree: assembly.root.toJSON(),
+      reviewViews: normalizeReviewViews(assembly.reviewViews),
       mates: mateSolver ? mateSolver.toJSON() : []
     },
     null,
@@ -103,6 +105,7 @@ export function deserializeProject(assembly, jsonString, mateSolver) {
   if (data.formatVersion !== FORMAT_VERSION || !Array.isArray(data.tree?.children)) {
     throw new Error('Unsupported or invalid CADLite project.');
   }
+  const reviewViews = normalizeReviewViews(data.reviewViews);
   const restored = data.tree.children.map(buildPartFromData);
   assembly.clear();
 
@@ -111,4 +114,5 @@ export function deserializeProject(assembly, jsonString, mateSolver) {
   }
 
   if (mateSolver) mateSolver.loadJSON(data.mates || []);
+  assembly.reviewViews = reviewViews;
 }

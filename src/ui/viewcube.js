@@ -307,6 +307,7 @@ export class ViewCube {
     const duration = 300;
 
     const animate = (now) => {
+      if (!this.animating) return;
       const elapsed = now - startTime;
       const progress = Math.min(1, elapsed / duration);
       const t = 1 - Math.pow(1 - progress, 3); // Ease out cubic

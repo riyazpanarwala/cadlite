@@ -4,6 +4,7 @@ import { Part } from './Part.js';
 export class Assembly {
   constructor(scene) {
     this.scene = scene;
+    this.reviewViews = [];
     this.root = new Part({ name: 'Assembly', type: 'assembly', kind: 'group' });
     this.scene.add(this.root.object3D);
   }
@@ -71,6 +72,7 @@ export class Assembly {
   }
 
   clear() {
+    this.reviewViews = [];
     this.root.children.slice().forEach((c) => this.removePart(c));
   }
 }

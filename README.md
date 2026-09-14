@@ -29,6 +29,16 @@ This is a temporary inspection preview: measuring, modeling, saving, and exporti
 return to assembled positions. Hidden components stay hidden; mate solving is
 paused during the preview. The slider needs at least two components and provides
 automatic spacing, not authored assembly animation steps.
+
+**Review views** saves named camera angles, display modes, section position and
+direction, cap visibility, component visibility, and explode settings. Enter a
+name and choose **Save view**; use **Recall**, **Update**, or **Delete** to manage
+the selected view. Save the project to persist these views, then recall them
+after reopening it. Model geometry remains in its assembled positions in the
+project; recalling an exploded view reapplies the temporary inspection preview.
+Older projects without review views still open. Deleted component references
+are skipped on recall; components added later retain their current visibility.
+
 Annotations and large-assembly performance qualification remain
 future work. This is not full eDrawings feature parity.
 
@@ -36,9 +46,13 @@ Run `npm run test:viewer` for background import, component separation, dimension
 save/reopen, failed-load preservation, hidden/clipped selection, and filled-section
 regression checks (including hollow sections and transformed components), plus
 exploded-view separation and exact restoration of nested component transforms.
+The suite also checks review-view serialization, camera restoration, validation,
+and compatibility with older project files.
 Run `npm run test:viewer:ui` for a hidden Electron test of import, cap rendering,
 the Fill cuts toggle, exploded-view rendering/reset, and saving assembled
 positions in the actual application interface.
+It also saves/reopens a project and recalls a review view to verify its camera,
+visibility, section, and explode settings.
 
 ```bash
 cd cadlite

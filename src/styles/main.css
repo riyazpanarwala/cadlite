@@ -1564,3 +1564,7 @@ html, body {
 #step-viewer-toolbar input[type=range] { width:100px; }
 #step-viewer-toolbar button:disabled { opacity:.45; }
 #step-viewer-toolbar [hidden] { display:none; }
+.review-views { display:flex; flex-wrap:wrap; align-items:center; gap:7px; width:100%; border-top:1px solid #354455; padding-top:7px; }
+.review-views input { background:#121b26; color:#e6edf5; border:1px solid #456078; border-radius:4px; padding:5px 8px; width:155px; }
+.review-views select { max-width:220px; }
+.review-views span { color:#9baec1; font-size:11px; }
