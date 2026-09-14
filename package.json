@@ -1,7 +1,7 @@
 {
   "name": "cadlite",
   "productName": "CADLite",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A basic parametric CAD application (parts + assemblies) inspired by SolidWorks",
   "main": "main.js",
   "scripts": {
