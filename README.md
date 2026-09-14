@@ -23,14 +23,22 @@ Per-face colors and PMI are not currently imported. Section cuts include a
 Caps are based on the display mesh, follow component placement and visibility,
 and are excluded from selection, measurements, saved geometry, and exports.
 Wireframe mode leaves cuts unfilled. Open or non-manifold contours may not cap.
-Exploded views, annotations, and large-assembly performance qualification remain
+The **Explode** slider separates components radially or along X/Y/Z. **Reset
+assembly** restores the original placements exactly, including nested assemblies.
+This is a temporary inspection preview: measuring, modeling, saving, and exporting
+return to assembled positions. Hidden components stay hidden; mate solving is
+paused during the preview. The slider needs at least two components and provides
+automatic spacing, not authored assembly animation steps.
+Annotations and large-assembly performance qualification remain
 future work. This is not full eDrawings feature parity.
 
 Run `npm run test:viewer` for background import, component separation, dimensions,
 save/reopen, failed-load preservation, hidden/clipped selection, and filled-section
-regression checks (including hollow sections and transformed components).
+regression checks (including hollow sections and transformed components), plus
+exploded-view separation and exact restoration of nested component transforms.
 Run `npm run test:viewer:ui` for a hidden Electron test of import, cap rendering,
-and the Fill cuts toggle in the actual application interface.
+the Fill cuts toggle, exploded-view rendering/reset, and saving assembled
+positions in the actual application interface.
 
 ```bash
 cd cadlite

@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import * as THREE from 'three';
+import { Assembly } from './src/assembly/Assembly.js';
+import { Part } from './src/assembly/Part.js';
+import { ExplodedView } from './src/core/exploded-view.js';
+import { serializeProject } from './src/project/save-load.js';
+
+const assembly = new Assembly(new THREE.Scene());
+const group = new Part({ name: 'Rotated subassembly', type: 'assembly' });
+group.object3D.position.set(20,30,40); group.object3D.rotation.z = Math.PI/2; group.object3D.scale.set(2,2,2);
+assembly.addPart(group);
+const makePart = (x) => {
+  const part = new Part({ name:'Part', mesh:new THREE.Mesh(new THREE.BoxGeometry(10,10,10),new THREE.MeshBasicMaterial()) });
+  part.object3D.position.x=x;group.addChild(part);return part;
+};
+const a=makePart(-10),b=makePart(10);
+b.setVisible(false);
+const before=JSON.parse(serializeProject(assembly)).tree;
+const preview=new ExplodedView(assembly);
+const world = part => part.object3D.getWorldPosition(new THREE.Vector3());
+const startA=world(a),startB=world(b),distance=startA.distanceTo(startB);
+assert.equal(preview.setAmount(50),true);
+assert.ok(world(a).distanceTo(world(b))>distance,'Parts should separate in world coordinates under rotated/scaled parent');
+const half=world(a);
+preview.setAmount(100);assert.ok(world(a).distanceTo(startA)>half.distanceTo(startA));
+preview.setAmount(50);assert.ok(world(a).distanceTo(half)<1e-9,'Slider must not accumulate offsets');
+preview.setAmount(50,'x');
+assert.ok(Math.abs(world(a).y-startA.y)<1e-9);assert.ok(Math.abs(world(a).z-startA.z)<1e-9);
+assert.ok(Math.abs(world(a).x-startA.x)>1);
+assert.equal(b.visible,false,'Explosion must preserve hidden state');
+preview.reset();assert.equal(preview.active,false);
+assert.deepEqual(JSON.parse(serializeProject(assembly)).tree,before,'Reset restores exact saved transforms and model');
+// Repeated previews and identical component centers must remain deterministic.
+a.object3D.position.set(0,0,0);b.object3D.position.set(0,0,0);
+preview.setAmount(100);assert.ok(world(a).distanceTo(world(b))>1);
+preview.setAmount(0);assert.deepEqual(a.object3D.position.toArray(),[0,0,0]);
+assembly.removePart(group);
+assert.equal(preview.setAmount(50),false);
+assembly.addPart(a);assert.equal(preview.setAmount(50),false,'A single part is not an assembly explosion');
+console.log('Exploded view passed: nested transforms, radial/axis separation, no drift, hidden parts, concentric parts, exact reset, and empty/single-part handling.');

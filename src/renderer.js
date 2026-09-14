@@ -98,6 +98,7 @@ const measurePanel = new MeasurePanel(measureHudEl, measureTool, {
 });
 
 function toggleMeasureTool() {
+  stepViewer.resetExplode();
   measureTool.toggle();
   updateMeasureButtonsState(measureTool.active);
   if (measureTool.active) {
@@ -147,6 +148,7 @@ function updateDocName(name) {
 }
 
 function resetScene(newDocName = 'Part1') {
+  stepViewer.resetExplode();
   assembly.clear();
   mateSolver.records = [];
   selection.clear();
@@ -192,7 +194,7 @@ const gizmo = new Gizmo(viewport, {
 });
 
 function updateGizmoAttachment() {
-  if (inspectionMode || mode !== 'assembly' || selection.selected.length !== 1) {
+  if (inspectionMode || viewport.explodedPreviewActive || mode !== 'assembly' || selection.selected.length !== 1) {
     gizmo.detach();
     return;
   }
@@ -1055,7 +1057,7 @@ function showMateStatus(msg) {
 // Live mate solver: re-locks every driven part to its driver every frame,
 // so mates hold even while you drag things around with the gizmo.
 (function mateSolverLoop() {
-  mateSolver.solve();
+  if (!viewport.explodedPreviewActive) mateSolver.solve();
   requestAnimationFrame(mateSolverLoop);
 })();
 
@@ -1529,6 +1531,7 @@ document.getElementById('btn-loft')?.addEventListener('click', () => {
 // ---------------------------------------------------------------------
 
 async function handleSaveProject() {
+  stepViewer.resetExplode();
   const json = serializeProject(assembly, mateSolver);
   const result = await window.cadlite.saveProject(json);
   if (result.ok) {
@@ -1541,6 +1544,7 @@ async function handleSaveProject() {
 }
 
 async function handleLoadProject() {
+  stepViewer.resetExplode();
   const result = await window.cadlite.loadProject();
   if (!result.ok) {
     setStatus('Load cancelled');
@@ -1564,14 +1568,17 @@ async function handleLoadProject() {
 }
 
 async function handleExportStl() {
+  stepViewer.resetExplode();
   const { STLExporter } = await import('three/addons/exporters/STLExporter.js');
   const exporter = new STLExporter();
+  stepViewer.resetExplode();
   const stlString = exporter.parse(assembly.root.object3D, { binary: false });
   const result = await window.cadlite.exportStl(stlString);
   setStatus(result.ok ? `Exported STL to ${result.filePath}` : 'Export cancelled');
 }
 
 async function handleExportStep() {
+  stepViewer.resetExplode();
   const parts = [];
   for (const part of assembly.allParts()) {
     if (part.type === 'part' && part.mesh) {
@@ -1627,6 +1634,7 @@ async function handleImportStep() {
 
     const imported = buildImportedTree(result.tree);
     selection.clear();
+    stepViewer.resetExplode();
     assembly.addPart(imported);
     updateDocName(result.fileName);
     treePanel.render();
@@ -1660,6 +1668,7 @@ const dmPrint = document.getElementById('dm-print');
 let currentDrawingSheet = null;
 
 function collectSceneMeshes() {
+  stepViewer.resetExplode();
   const meshes = [];
   for (const part of assembly.allParts()) {
     const m = part.mesh || (part.object3D && part.object3D.isMesh ? part.object3D : null);
@@ -1933,7 +1942,8 @@ function setStatus(msg) {
 
 const stepViewer = installStepViewer({ viewport, assembly, selection, refresh: () => { treePanel.render(); propertiesPanel.render(); },
   open: handleImportStep, measure: toggleMeasureTool, status: setStatus,
-  setInspection: value => { inspectionMode = value; updateGizmoAttachment(); }
+  setInspection: value => { inspectionMode = value; updateGizmoAttachment(); },
+  onExplode: () => { measureTool.deactivate(); updateMeasureButtonsState(false); gizmo.detach(); }
 });
 window.cadlite.onStepProgress?.(setStatus);
 activateRibbonTab('view');
