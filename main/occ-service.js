@@ -558,6 +558,9 @@ function shapeToMeshData(oc, shape, deflection = 0.5) {
       normal: topoFace.normal,
       centroid: topoFace.centroid,
       area: topoFace.area,
+      radius: topoFace.radius,
+      diameter: topoFace.diameter,
+      axis: topoFace.axis,
       startTriangle,
       triangleCount: nbTriangles,
       startIndex,
@@ -571,7 +574,8 @@ function shapeToMeshData(oc, shape, deflection = 0.5) {
     index: indices,
     faceRanges,
     edges: (topology && topology.edges) || [],
-    faces: (topology && topology.faces) || []
+    faces: (topology && topology.faces) || [],
+    vertices: (topology && topology.vertices) || []
   };
 }
 

@@ -91,6 +91,38 @@ export class Part {
     return this.topology.edges.find((e) => e.topoId === edgeId) || null;
   }
 
+  getVertices() {
+    if (this.topology && this.topology.vertices && this.topology.vertices.length > 0) {
+      return this.topology.vertices;
+    }
+    if (this.topology && this.topology.edges && this.topology.edges.length > 0) {
+      const vertMap = new Map();
+      let vIndex = 1;
+      for (const e of this.topology.edges) {
+        if (!e.polyline || e.polyline.length < 2) continue;
+        const p1 = e.polyline[0];
+        const p2 = e.polyline[e.polyline.length - 1];
+        for (const p of [p1, p2]) {
+          const key = `${Math.round(p[0] * 100) / 100}_${Math.round(p[1] * 100) / 100}_${Math.round(p[2] * 100) / 100}`;
+          if (!vertMap.has(key)) {
+            vertMap.set(key, {
+              index: vIndex - 1,
+              topoId: `Vertex_${vIndex++}`,
+              point: [...p]
+            });
+          }
+        }
+      }
+      return Array.from(vertMap.values());
+    }
+    return [];
+  }
+
+  getVertexById(vertexId) {
+    const list = this.getVertices();
+    return list.find((v) => v.topoId === vertexId) || null;
+  }
+
   buildEdgeVisualizer() {
     if (!this.mesh || !this.topology || !this.topology.edges || this.topology.edges.length === 0) return;
 

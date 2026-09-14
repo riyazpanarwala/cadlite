@@ -22,6 +22,8 @@ import { chamferPart, filletPart, shellPart } from './geometry/modifiers.js';
 import { DrawingSheetGenerator } from './drawing/drawing-sheet.js';
 import { recomputePart } from './history/feature-evaluator.js';
 import { FeatureTree, FeatureNode } from './history/FeatureTree.js';
+import { MeasureTool } from './core/measure-tool.js';
+import { MeasurePanel } from './ui/measure-panel.js';
 
 // ---------------------------------------------------------------------
 // Bootstrapping
@@ -83,6 +85,33 @@ const selection = new SelectionManager(() => {
 });
 selection.attachScene(viewport.scene);
 treePanel.selection = selection;
+
+// eDrawings 3D Measurement Tool & Floating HUD Panel
+const measureCalloutEl = document.getElementById('measure-callout-badge');
+const measureHudEl = document.getElementById('measure-hud');
+const measureTool = new MeasureTool(viewport, assembly, { calloutEl: measureCalloutEl });
+const measurePanel = new MeasurePanel(measureHudEl, measureTool, {
+  onClose: () => updateMeasureButtonsState(false)
+});
+
+function toggleMeasureTool() {
+  measureTool.toggle();
+  updateMeasureButtonsState(measureTool.active);
+  if (measureTool.active) {
+    setStatus('Measure Tool active (eDrawings): Click 2 entities (vertex, edge, face) to measure distance and ΔX, ΔY, ΔZ, or 1 to inspect');
+    viewportHint.textContent = 'Measure Mode: Click any 2 entities to measure distance; Esc to clear; M to exit';
+  } else {
+    setStatus('Measure Tool closed');
+    viewportHint.textContent = 'Click a part to select and drag it, or press S to sketch';
+  }
+}
+
+function updateMeasureButtonsState(active) {
+  document.getElementById('qa-measure')?.classList.toggle('active', active);
+  document.getElementById('btn-measure')?.classList.toggle('active', active);
+  document.getElementById('btn-view-measure')?.classList.toggle('active', active);
+  document.getElementById('nav-measure')?.classList.toggle('active', active);
+}
 
 // Selection filter mode buttons (Part / Face / Edge)
 document.querySelectorAll('[data-filter-mode]').forEach((btn) => {
@@ -626,6 +655,11 @@ function updateSketchDOFBadge() {
 
 // Hover highlighting in Face and Edge filter modes, and live sketch vertex dragging
 canvas.addEventListener('pointermove', (event) => {
+  if (measureTool && measureTool.active) {
+    measureTool.handlePointerMove(event);
+    return;
+  }
+
   if (mode === 'sketch') {
     if (isDraggingSketchVertex && activeSketch) {
       const raycaster = viewport.raycasterFromEvent(event);
@@ -691,6 +725,11 @@ canvas.addEventListener('pointerdown', (event) => {
   // before this listener) already ran and set `dragging` if a handle was
   // grabbed - bail out so we don't also run selection/sketch logic underneath it.
   if (gizmo.controls.dragging) return;
+
+  if (measureTool && measureTool.active) {
+    const handled = measureTool.handlePointerDown(event);
+    if (handled) return;
+  }
 
   if (mode === 'sketch') {
     const raycaster = viewport.raycasterFromEvent(event);
@@ -1604,19 +1643,25 @@ async function handleImportStep() {
       kind: 'step',
       mesh,
       color: '#4fa1d8',
+      topology: meshData,
       params: {
         mesh: meshData,
+        topology: meshData,
         stepContent,
         fileName
       }
     });
 
+    part.buildEdgeVisualizer();
     assembly.addPart(part);
     selection.select(part);
     updateDocName(cleanName);
+    viewport.zoomAll(assembly.root.object3D);
     treePanel.render();
     propertiesPanel.render();
-    setStatus(`Imported STEP: ${fileName} (${meshData.positions.length / 3} vertices)`);
+    const faceCount = (meshData.faceRanges && meshData.faceRanges.length) || (meshData.faces && meshData.faces.length) || 0;
+    const edgeCount = (meshData.edges && meshData.edges.length) || 0;
+    setStatus(`Imported STEP: ${fileName} (${faceCount} faces, ${edgeCount} edges, ${meshData.positions.length / 3} vertices)`);
   } catch (err) {
     setStatus(`Import STEP error: ${err.message}`);
     alert(`Import STEP error: ${err.message}`);
@@ -1770,8 +1815,25 @@ drawingModal?.addEventListener('click', (e) => {
 });
 
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && drawingModal && !drawingModal.classList.contains('hidden')) {
-    handleCloseDrawingSheet();
+  const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+  if (!isInput && (e.key === 'm' || e.key === 'M')) {
+    e.preventDefault();
+    toggleMeasureTool();
+    return;
+  }
+  if (e.key === 'Escape') {
+    if (measureTool && measureTool.active) {
+      if (measureTool.entity1) {
+        measureTool.clear();
+      } else {
+        measureTool.deactivate();
+        updateMeasureButtonsState(false);
+      }
+      return;
+    }
+    if (drawingModal && !drawingModal.classList.contains('hidden')) {
+      handleCloseDrawingSheet();
+    }
   }
 });
 
@@ -1783,6 +1845,10 @@ document.getElementById('qa-export-step')?.addEventListener('click', handleExpor
 document.getElementById('qa-drawing-sheet')?.addEventListener('click', handleOpenDrawingSheet);
 document.getElementById('qa-export-dxf')?.addEventListener('click', handleExportDxf);
 document.getElementById('qa-export-stl')?.addEventListener('click', handleExportStl);
+document.getElementById('qa-measure')?.addEventListener('click', toggleMeasureTool);
+document.getElementById('btn-measure')?.addEventListener('click', toggleMeasureTool);
+document.getElementById('btn-view-measure')?.addEventListener('click', toggleMeasureTool);
+document.getElementById('nav-measure')?.addEventListener('click', toggleMeasureTool);
 document.getElementById('qa-new')?.addEventListener('click', () => {
   if (confirm('Start a new part? Unsaved changes in the current part will be discarded.')) {
     resetScene('Part' + (Math.floor(Math.random() * 900) + 100));

@@ -40,6 +40,9 @@ function computeFaceGeometry(oc, face) {
   let normal = [0, 0, 1];
   let centroid = [0, 0, 0];
   let area = 0;
+  let radius = null;
+  let diameter = null;
+  let axis = null;
 
   try {
     const gprops = new oc.GProp_GProps_1();
@@ -51,7 +54,24 @@ function computeFaceGeometry(oc, face) {
 
   try {
     const surf = new oc.BRepAdaptor_Surface_2(face, true);
-    surfaceType = getSurfaceTypeName(oc, surf.GetType());
+    const sType = surf.GetType();
+    surfaceType = getSurfaceTypeName(oc, sType);
+
+    if (sType === oc.GeomAbs_SurfaceType.GeomAbs_Cylinder) {
+      try {
+        const cyl = surf.Cylinder();
+        radius = cyl.Radius();
+        diameter = radius * 2;
+        const ax = cyl.Axis().Direction();
+        axis = [ax.X(), ax.Y(), ax.Z()];
+      } catch (_) {}
+    } else if (sType === oc.GeomAbs_SurfaceType.GeomAbs_Sphere) {
+      try {
+        const sph = surf.Sphere();
+        radius = sph.Radius();
+        diameter = radius * 2;
+      } catch (_) {}
+    }
 
     const uMid = (surf.FirstUParameter() + surf.LastUParameter()) / 2;
     const vMid = (surf.FirstVParameter() + surf.LastVParameter()) / 2;
@@ -70,7 +90,7 @@ function computeFaceGeometry(oc, face) {
     }
   } catch (_) {}
 
-  return { surfaceType, normal, centroid, area };
+  return { surfaceType, normal, centroid, area, radius, diameter, axis };
 }
 
 /**
@@ -116,6 +136,10 @@ function sampleEdgePolyline(oc, edge) {
   let curveType = 'line';
   let length = 0;
   let centroid = [0, 0, 0];
+  let radius = null;
+  let diameter = null;
+  let center = null;
+  let normal = null;
   const polyline = [];
 
   try {
@@ -128,12 +152,26 @@ function sampleEdgePolyline(oc, edge) {
 
   try {
     const curveAdaptor = new oc.BRepAdaptor_Curve_2(edge);
-    curveType = getCurveTypeName(oc, curveAdaptor.GetType());
+    const cType = curveAdaptor.GetType();
+    curveType = getCurveTypeName(oc, cType);
+
+    if (cType === oc.GeomAbs_CurveType.GeomAbs_Circle) {
+      try {
+        const circ = curveAdaptor.Circle();
+        radius = circ.Radius();
+        diameter = radius * 2;
+        const loc = circ.Location();
+        center = [loc.X(), loc.Y(), loc.Z()];
+        const ax = circ.Axis().Direction();
+        normal = [ax.X(), ax.Y(), ax.Z()];
+      } catch (_) {}
+    }
+
     const u1 = curveAdaptor.FirstParameter();
     const u2 = curveAdaptor.LastParameter();
 
     const isLine = curveType === 'line';
-    const samples = isLine ? 2 : 20;
+    const samples = isLine ? 2 : 24;
 
     for (let s = 0; s < samples; s++) {
       const u = u1 + (u2 - u1) * (s / (samples - 1));
@@ -142,7 +180,7 @@ function sampleEdgePolyline(oc, edge) {
     }
   } catch (_) {}
 
-  return { curveType, length, centroid, polyline };
+  return { curveType, length, centroid, polyline, radius, diameter, center, normal };
 }
 
 /**
@@ -238,13 +276,36 @@ function analyzeTopology(oc, shape, context = {}) {
       length: edgeGeom.length,
       centroid: edgeGeom.centroid,
       adjacentFaceIds,
-      polyline: edgeGeom.polyline
+      polyline: edgeGeom.polyline,
+      radius: edgeGeom.radius,
+      diameter: edgeGeom.diameter,
+      center: edgeGeom.center,
+      normal: edgeGeom.normal
     });
+  }
+
+  // Extract B-Rep vertices (corners, end points)
+  const vertexMap = new oc.TopTools_IndexedMapOfShape_1();
+  oc.TopExp.MapShapes_1(shape, oc.TopAbs_ShapeEnum.TopAbs_VERTEX, vertexMap);
+  const numVertices = vertexMap.Extent();
+  const vertices = [];
+
+  for (let v = 1; v <= numVertices; v++) {
+    const vertexShape = oc.TopoDS.Vertex_1(vertexMap.FindKey(v));
+    try {
+      const pnt = oc.BRep_Tool.Pnt(vertexShape);
+      vertices.push({
+        index: v - 1,
+        topoId: `Vertex_${v}`,
+        point: [pnt.X(), pnt.Y(), pnt.Z()]
+      });
+    } catch (_) {}
   }
 
   return {
     faces,
     edges,
+    vertices,
     faceShapeList,
     edgeShapeList
   };
