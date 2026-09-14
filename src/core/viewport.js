@@ -91,7 +91,7 @@ export class Viewport {
   /** Centers the camera on all objects in the scene */
   zoomAll(rootGroup) {
     const box = new THREE.Box3();
-    if (rootGroup && rootGroup.children.length > 0) {
+    if (rootGroup) {
       box.setFromObject(rootGroup);
     }
     if (box.isEmpty()) {
@@ -103,6 +103,9 @@ export class Viewport {
     box.getSize(size);
     const maxDim = Math.max(size.x, size.y, size.z, 50);
     const dist = maxDim * 2.2;
+    this.camera.near = Math.max(maxDim / 10000, 0.001);
+    this.camera.far = Math.max(maxDim * 100, 10000);
+    this.camera.updateProjectionMatrix();
 
     const offset = this.camera.position.clone().sub(this.controls.target).normalize();
     if (offset.lengthSq() < 0.001) offset.set(1, 1, 1).normalize();

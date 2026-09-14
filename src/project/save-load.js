@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Part } from '../assembly/Part.js';
+import { Part, reservePartId } from '../assembly/Part.js';
 import { geometryForPrimitive, buildPrimitiveTopology } from '../geometry/primitives.js';
 import { buildExtrudeGeometry, buildExtrudeTopology } from '../geometry/extrude.js';
 import { buildRevolveGeometry } from '../geometry/revolve.js';
@@ -78,6 +78,7 @@ function buildPartFromData(data) {
   }
 
   part.id = data.id; // preserve original ids so mate records / references stay valid
+  reservePartId(data.id);
   part.object3D.name = part.id;
   part.object3D.userData.partId = part.id;
   part.setVisible(data.visible !== false);
@@ -99,10 +100,14 @@ function buildPartFromData(data) {
 /** Rebuilds the assembly's tree (and mate solver state) in-place from a parsed project JSON object. */
 export function deserializeProject(assembly, jsonString, mateSolver) {
   const data = JSON.parse(jsonString);
+  if (data.formatVersion !== FORMAT_VERSION || !Array.isArray(data.tree?.children)) {
+    throw new Error('Unsupported or invalid CADLite project.');
+  }
+  const restored = data.tree.children.map(buildPartFromData);
   assembly.clear();
 
-  for (const childData of data.tree.children || []) {
-    assembly.root.addChild(buildPartFromData(childData));
+  for (const child of restored) {
+    assembly.root.addChild(child);
   }
 
   if (mateSolver) mateSolver.loadJSON(data.mates || []);

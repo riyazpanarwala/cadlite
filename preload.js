@@ -13,8 +13,13 @@ contextBridge.exposeInMainWorld('cadlite', {
   getTopology: (shapeDef) => ipcRenderer.invoke('geometry:getTopology', shapeDef),
   exportStep: (parts) => ipcRenderer.invoke('step:export', parts),
   importStep: () => ipcRenderer.invoke('step:import'),
+  cancelStepImport: () => ipcRenderer.invoke('step:cancel'),
+  onStepProgress: (callback) => {
+    const listener = (_event, message) => callback(message);
+    ipcRenderer.on('step:progress', listener);
+    return () => ipcRenderer.removeListener('step:progress', listener);
+  },
   exportDxf: (dxfString) => ipcRenderer.invoke('drawing:exportDxf', dxfString),
   exportSvg: (svgString) => ipcRenderer.invoke('drawing:exportSvg', svgString)
 });
-
 

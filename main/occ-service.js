@@ -782,10 +782,14 @@ async function exportToStep({ parts }) {
 /**
  * Imports a STEP file from its string content, extracts B-Rep solid(s), and triangulates.
  */
-async function importFromStep({ stepContent, fileName = 'ImportedPart.step' }) {
+async function importFromStep({ stepContent, fileName = 'ImportedPart.step', withAssembly = false, report }) {
   const oc = await getOC();
   if (!stepContent || typeof stepContent !== 'string') {
     throw new Error('Invalid or empty STEP file content');
+  }
+  if (withAssembly) {
+    const { readStepAssembly } = require('./step-reader');
+    return readStepAssembly(oc, stepContent, fileName, shapeToMeshData, report);
   }
 
   const tmpName = `/import_${Date.now()}_${Math.floor(Math.random() * 10000)}.step`;

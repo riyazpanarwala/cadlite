@@ -1,6 +1,31 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { Worker } = require('node:worker_threads');
+let stepJob = null;
+
+function importStepInWorker(data) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(path.join(__dirname, 'main', 'step-worker.js'), { workerData: data });
+    const finish = (error, result) => {
+      clearTimeout(timer);
+      if (stepJob?.worker === worker) stepJob = null;
+      worker.removeAllListeners();
+      worker.terminate();
+      if (error) reject(error); else resolve(result);
+    };
+    const timer = setTimeout(() => finish(new Error('STEP import timed out. Try a smaller assembly.')), 180000);
+    stepJob = { worker, cancel: () => finish(new Error('STEP import cancelled.')) };
+    worker.on('message', message => {
+      if (message.progress) {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('step:progress', message.progress);
+      } else if (message.error) finish(new Error(message.error));
+      else finish(null, message.result);
+    });
+    worker.on('error', finish);
+    worker.on('exit', code => finish(new Error(`STEP importer exited unexpectedly (${code}).`)));
+  });
+}
 
 let mainWindow = null;
 
@@ -35,6 +60,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  stepJob?.cancel();
   if (process.platform !== 'darwin') app.quit();
 });
 
@@ -175,7 +201,11 @@ ipcMain.handle('step:export', async (_evt, parts) => {
   }
 });
 
+ipcMain.handle('step:cancel', () => { stepJob?.cancel(); return { ok: true }; });
+let choosingStep = false;
 ipcMain.handle('step:import', async () => {
+  if (stepJob || choosingStep) return { ok: false, error: 'A STEP import is already in progress.' };
+  choosingStep = true;
   try {
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
       title: 'Import STEP Model',
@@ -189,20 +219,19 @@ ipcMain.handle('step:import', async () => {
 
     const filePath = filePaths[0];
     const fileName = path.basename(filePath);
-    const stepContent = fs.readFileSync(filePath, 'utf-8');
-
-    const { importFromStep } = require('./main/occ-service.js');
-    const result = await importFromStep({ stepContent, fileName });
+    const stepContent = await fs.promises.readFile(filePath, 'utf-8');
+    const result = await importStepInWorker({ stepContent, fileName });
     return {
       ok: true,
-      meshData: result.meshData,
-      stepContent: result.stepContent,
+      ...result,
       fileName,
       filePath
     };
   } catch (err) {
     console.error('STEP import failed:', err);
     return { ok: false, error: err.message || String(err) };
+  } finally {
+    choosingStep = false;
   }
 });
 
@@ -243,6 +272,5 @@ ipcMain.handle('drawing:exportSvg', async (_evt, svgString) => {
     return { ok: false, error: err.message || String(err) };
   }
 });
-
 
 

@@ -1557,3 +1557,10 @@ html, body {
 
 
 
+
+#step-viewer-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:7px; padding:9px 12px; background:#192431; border-bottom:1px solid #354455; font-size:12px; }
+#step-viewer-toolbar button, #step-viewer-toolbar select { background:#26384b; color:#e6edf5; border:1px solid #456078; border-radius:4px; padding:5px 8px; }
+#step-viewer-toolbar label { display:flex; align-items:center; gap:5px; }
+#step-viewer-toolbar input[type=range] { width:100px; }
+#step-viewer-toolbar button:disabled { opacity:.45; }
+#step-viewer-toolbar [hidden] { display:none; }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+const escapeText = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 const KIND_ICON = {
   box: '📦',
@@ -131,7 +132,7 @@ export class TreePanel {
     docNode.innerHTML = `
       <div class="tree-node doc-header">
         <span class="icon">📦</span>
-        <span class="label doc-title">${this.docName}</span>
+        <span class="label doc-title">${escapeText(this.docName)}</span>
       </div>
     `;
 
@@ -165,7 +166,7 @@ export class TreePanel {
         bodyItem.className = 'tree-node' + (this.selection.isSelected(b) ? ' selected' : '');
         bodyItem.innerHTML = `
           <span class="icon">🧊</span>
-          <span class="label">Solid${i + 1} (${b.name})</span>
+          <span class="label">Solid${i + 1} (${escapeText(b.name)})</span>
           <span class="vis-toggle" title="Toggle visibility">${b.visible ? '👁' : '—'}</span>
         `;
         bodyItem.querySelector('.label').addEventListener('click', (e) => {
@@ -248,7 +249,7 @@ export class TreePanel {
 
     // 4. Feature Tree History Nodes (Extrusion 1, Chamfer 1, etc.)
     for (const child of this.assembly.root.children) {
-      if (this.filterText && !(child.name || '').toLowerCase().includes(this.filterText)) continue;
+      if (this.filterText && ![...child.walk()].some(node => (node.name || '').toLowerCase().includes(this.filterText))) continue;
       docChildren.appendChild(this._buildNode(child));
     }
 
@@ -277,7 +278,7 @@ export class TreePanel {
 
     row.innerHTML = `
       <span class="icon">${icon}</span>
-      <span class="label">${displayName}</span>
+      <span class="label">${escapeText(displayName)}</span>
       <span class="vis-toggle" title="Toggle visibility">${part.visible ? '👁' : '—'}</span>
     `;
 
@@ -295,7 +296,7 @@ export class TreePanel {
     wrapper.appendChild(row);
 
     // Parametric Feature Tree History & Rollback Bar
-    if (part.featureTree && part.featureTree.features && part.featureTree.features.length > 0) {
+    if (part.kind !== 'step' && part.featureTree && part.featureTree.features && part.featureTree.features.length > 0) {
       this._renderFeatureList(part, wrapper);
     } else if (part.kind === 'extrude') {
       // Nested sketch under extrude if applicable

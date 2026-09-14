@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { buildImportedTree, installStepViewer, isVisibleHit } from './ui/step-viewer.js';
+let inspectionMode = true;
+let stepImportBusy = false;
 import { Viewport } from './core/viewport.js';
 import { SelectionManager } from './core/selection.js';
 import { Gizmo } from './core/gizmo.js';
@@ -189,7 +192,7 @@ const gizmo = new Gizmo(viewport, {
 });
 
 function updateGizmoAttachment() {
-  if (mode !== 'assembly' || selection.selected.length !== 1) {
+  if (inspectionMode || mode !== 'assembly' || selection.selected.length !== 1) {
     gizmo.detach();
     return;
   }
@@ -678,7 +681,7 @@ canvas.addEventListener('pointermove', (event) => {
   const raycaster = viewport.raycasterFromEvent(event);
 
   if (selection.filterMode === 'face') {
-    const intersects = raycaster.intersectObjects(assembly.root.object3D.children, true);
+    const intersects = raycaster.intersectObjects(assembly.root.object3D.children, true).filter(hit => isVisibleHit(hit, viewport.sectionPlane));
     const hit = intersects.find((h) => h.object.isMesh && h.faceIndex !== undefined && !h.object.userData.isOverlay);
     if (hit) {
       const part = assembly.findByObject3D(hit.object);
@@ -693,7 +696,7 @@ canvas.addEventListener('pointermove', (event) => {
     selection.hoverFace(null, null);
   } else if (selection.filterMode === 'edge') {
     raycaster.params.Line = { threshold: 4 };
-    const intersects = raycaster.intersectObjects(assembly.root.object3D.children, true);
+    const intersects = raycaster.intersectObjects(assembly.root.object3D.children, true).filter(hit => isVisibleHit(hit, viewport.sectionPlane));
     const hit = intersects.find((h) => h.object.userData && h.object.userData.isCadEdge);
     if (hit) {
       const part = assembly.findByObject3D(hit.object.parent);
@@ -737,7 +740,7 @@ canvas.addEventListener('pointerdown', (event) => {
     // 0. Project Geometry / Convert Entities tool
     if (activeSketch.tool === 'project') {
       raycaster.params.Line = { threshold: 6 };
-      const modelHits = raycaster.intersectObjects(assembly.root.object3D.children, true);
+      const modelHits = raycaster.intersectObjects(assembly.root.object3D.children, true).filter(hit => isVisibleHit(hit, viewport.sectionPlane));
       const edgeHit = modelHits.find((h) => h.object.userData && h.object.userData.isCadEdge);
       if (edgeHit && edgeHit.object.userData.edgeData) {
         const part = assembly.findByObject3D(edgeHit.object.parent);
@@ -834,7 +837,7 @@ canvas.addEventListener('pointerdown', (event) => {
   const raycaster = viewport.raycasterFromEvent(event);
 
   if (selection.filterMode === 'face') {
-    const intersects = raycaster.intersectObjects(assembly.root.object3D.children, true);
+    const intersects = raycaster.intersectObjects(assembly.root.object3D.children, true).filter(hit => isVisibleHit(hit, viewport.sectionPlane));
     const hit = intersects.find((h) => h.object.isMesh && h.faceIndex !== undefined && !h.object.userData.isOverlay);
     if (!hit) {
       if (!event.shiftKey) selection.clearSubSelections();
@@ -854,7 +857,7 @@ canvas.addEventListener('pointerdown', (event) => {
 
   if (selection.filterMode === 'edge') {
     raycaster.params.Line = { threshold: 4 };
-    const intersects = raycaster.intersectObjects(assembly.root.object3D.children, true);
+    const intersects = raycaster.intersectObjects(assembly.root.object3D.children, true).filter(hit => isVisibleHit(hit, viewport.sectionPlane));
     const hit = intersects.find((h) => h.object.userData && h.object.userData.isCadEdge);
     if (!hit) {
       if (!event.shiftKey) selection.clearSubSelections();
@@ -871,7 +874,7 @@ canvas.addEventListener('pointerdown', (event) => {
   }
 
   // Part mode:
-  const intersects = raycaster.intersectObjects(assembly.root.object3D.children, true);
+  const intersects = raycaster.intersectObjects(assembly.root.object3D.children, true).filter(hit => isVisibleHit(hit, viewport.sectionPlane));
   const meshHit = intersects.find((h) => h.object.isMesh && !h.object.userData.isOverlay);
   if (!meshHit) {
     if (!event.shiftKey) selection.clear();
@@ -1545,7 +1548,14 @@ async function handleLoadProject() {
   }
   selection.clear();
   gizmo.detach();
-  deserializeProject(assembly, result.contents, mateSolver);
+  try {
+    deserializeProject(assembly, result.contents, mateSolver);
+    stepViewer.apply();
+    viewport.zoomAll(assembly.root.object3D);
+  } catch (error) {
+    setStatus(`Cannot open project: ${error.message}`);
+    return;
+  }
   const fileName = result.filePath.split(/[\\/]/).pop();
   updateDocName(fileName);
   treePanel.render();
@@ -1563,7 +1573,7 @@ async function handleExportStl() {
 
 async function handleExportStep() {
   const parts = [];
-  for (const part of assembly.root.children) {
+  for (const part of assembly.allParts()) {
     if (part.type === 'part' && part.mesh) {
       part.object3D.updateMatrixWorld(true);
       parts.push({
@@ -1599,6 +1609,9 @@ async function handleExportStep() {
 }
 
 async function handleImportStep() {
+  if (stepImportBusy) return;
+  stepImportBusy = true;
+  stepViewer.busy(true);
   setStatus('Selecting STEP file to import...');
   try {
     const result = await window.cadlite.importStep();
@@ -1612,59 +1625,22 @@ async function handleImportStep() {
       return;
     }
 
-    const { meshData, stepContent, fileName } = result;
-    const { positions, normals, index } = meshData;
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setIndex(index);
-    if (normals && normals.some((n) => n !== 0)) {
-      geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-    } else {
-      geometry.computeVertexNormals();
-    }
-
-    // Autodesk Inventor solid body material
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x4fa1d8,
-      metalness: 0.2,
-      roughness: 0.5
-    });
-
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-
-    const cleanName = fileName.replace(/\.(step|stp)$/i, '') || 'ImportedPart';
-
-    const part = new Part({
-      name: cleanName,
-      type: 'part',
-      kind: 'step',
-      mesh,
-      color: '#4fa1d8',
-      topology: meshData,
-      params: {
-        mesh: meshData,
-        topology: meshData,
-        stepContent,
-        fileName
-      }
-    });
-
-    part.buildEdgeVisualizer();
-    assembly.addPart(part);
-    selection.select(part);
-    updateDocName(cleanName);
-    viewport.zoomAll(assembly.root.object3D);
+    const imported = buildImportedTree(result.tree);
+    selection.clear();
+    assembly.addPart(imported);
+    updateDocName(result.fileName);
     treePanel.render();
     propertiesPanel.render();
-    const faceCount = (meshData.faceRanges && meshData.faceRanges.length) || (meshData.faces && meshData.faces.length) || 0;
-    const edgeCount = (meshData.edges && meshData.edges.length) || 0;
-    setStatus(`Imported STEP: ${fileName} (${faceCount} faces, ${edgeCount} edges, ${meshData.positions.length / 3} vertices)`);
+    stepViewer.apply();
+    viewport.zoomAll(imported.object3D);
+    activateRibbonTab('view');
+    setStatus('Imported ' + result.bodyCount + ' component(s); model units: mm.');
   } catch (err) {
     setStatus(`Import STEP error: ${err.message}`);
     alert(`Import STEP error: ${err.message}`);
+  } finally {
+    stepImportBusy = false;
+    stepViewer.busy(false);
   }
 }
 
@@ -1954,3 +1930,11 @@ function setStatus(msg) {
   statusLeft.textContent = msg;
 }
 
+
+const stepViewer = installStepViewer({ viewport, assembly, selection, refresh: () => { treePanel.render(); propertiesPanel.render(); },
+  open: handleImportStep, measure: toggleMeasureTool, status: setStatus,
+  setInspection: value => { inspectionMode = value; updateGizmoAttachment(); }
+});
+window.cadlite.onStepProgress?.(setStatus);
+activateRibbonTab('view');
+viewportHint.textContent = 'Open a STEP file to inspect. Select components in the tree; press M to measure.';

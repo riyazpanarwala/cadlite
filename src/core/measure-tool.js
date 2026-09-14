@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isVisibleHit } from '../ui/step-viewer.js';
 import { measureEntities, formatDistance, formatAngle } from './measure-engine.js';
 
 /**
@@ -246,7 +247,7 @@ export class MeasureTool {
     if (!this.active || event.button !== 0) return false;
 
     const raycaster = this.viewport.raycasterFromEvent(event);
-    const candidate = this.hoverCandidate || this._findCandidateUnderCursor(raycaster, event);
+    const candidate = this._findCandidateUnderCursor(raycaster, event);
 
     if (!candidate) {
       // Clicking empty space clears current measurement
@@ -288,7 +289,7 @@ export class MeasureTool {
     // 2. Try Edge Snapping (Linear & Circular)
     if (filter === 'all' || filter === 'edge') {
       raycaster.params.Line = { threshold: 8 };
-      const modelHits = raycaster.intersectObjects(this.assembly.root.object3D.children, true);
+      const modelHits = raycaster.intersectObjects(this.assembly.root.object3D.children, true).filter(hit => isVisibleHit(hit, this.viewport.sectionPlane));
       const edgeHit = modelHits.find((h) => h.object.userData && h.object.userData.isCadEdge);
       if (edgeHit && edgeHit.object.userData.edgeData) {
         const part = this.assembly.findByObject3D(edgeHit.object.parent);
@@ -307,7 +308,7 @@ export class MeasureTool {
 
     // 3. Try Face Snapping (Planar & Cylindrical)
     if (filter === 'all' || filter === 'face') {
-      const modelHits = raycaster.intersectObjects(this.assembly.root.object3D.children, true);
+      const modelHits = raycaster.intersectObjects(this.assembly.root.object3D.children, true).filter(hit => isVisibleHit(hit, this.viewport.sectionPlane));
       const faceHit = modelHits.find((h) => h.object.isMesh && h.faceIndex !== undefined && !h.object.userData.isOverlay);
       if (faceHit) {
         const part = this.assembly.findByObject3D(faceHit.object);
@@ -353,6 +354,7 @@ export class MeasureTool {
 
       for (const v of vertices) {
         const wp = new THREE.Vector3(...v.point).applyMatrix4(mw);
+        if (!isVisibleHit({ object: part.mesh, point: wp }, this.viewport.sectionPlane)) continue;
         const pCopy = wp.clone().project(camera);
 
         // Discard behind camera

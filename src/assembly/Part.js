@@ -2,6 +2,10 @@ import * as THREE from 'three';
 import { FeatureTree, FeatureNode } from '../history/FeatureTree.js';
 
 let nextId = 1;
+export function reservePartId(id) {
+  const match = /^part_(\d+)$/.exec(id);
+  if (match) nextId = Math.max(nextId, Number(match[1]) + 1);
+}
 
 /**
  * A Part is either:

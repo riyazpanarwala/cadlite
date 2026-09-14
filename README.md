@@ -8,6 +8,23 @@ team over decades — see [Design architecture & capabilities](#design-architect
 
 ## Setup
 
+### STEP viewer update
+
+The viewer toolbar provides STEP opening, cancellable background import, fit to
+selection, measurement, hide/isolate/show-all, shaded/edge/wireframe/transparent
+display, and movable X/Y/Z section cuts. Inspect-only mode is enabled by default
+to prevent the transform gizmo from moving parts while selecting them.
+
+The assembly-aware importer preserves component hierarchy, placements, and
+component names/colors when available. Each leaf stores its own exact STEP
+geometry for independent export and project saving. Geometry is imported in mm.
+Per-face colors and PMI are not currently imported. Section cuts are uncapped;
+exploded views, annotations, and large-assembly performance qualification remain
+future work. This is not full eDrawings feature parity.
+
+Run `npm run test:viewer` for background import, component separation, dimensions,
+save/reopen, failed-load preservation, and hidden/clipped selection regression checks.
+
 ```bash
 cd cadlite
 npm install
